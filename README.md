@@ -27,7 +27,7 @@ A comprehensive Node.js automation tool for creating multiple wallets, distribut
 
 ### 1. Setup
 ```bash
-wget -O install.sh "https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/install.sh" && chmod +x install.sh && ./install.sh setup
+wget -O install.sh "https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/install.sh" && chmod +x install.sh && ./install.sh setup && ./install.sh show_help
 ```
 
 ### 2. Configure Environment
