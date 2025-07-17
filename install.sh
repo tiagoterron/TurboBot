@@ -11,8 +11,8 @@ ENV_FILE="$SCRIPT_DIR/.env"
 LOG_FILE="$SCRIPT_DIR/automation.log"
 
 # External files configuration
-WALLET_MANAGER_URL="https://raw.githubusercontent.com/your-repo/wallet-automation/main/script.js"
-PACKAGE_JSON_URL="https://raw.githubusercontent.com/your-repo/wallet-automation/main/package.json"
+WALLET_MANAGER_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js?token=GHSAT0AAAAAADHEAI4MQJFBRXLILP4FVOJ62DZKHYQ"
+PACKAGE_JSON_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/package.json?token=GHSAT0AAAAAADHEAI4MY2QQEBWWGI4HT6PY2DZKG7Q"
 
 # Colors for output
 RED='\033[0;31m'
