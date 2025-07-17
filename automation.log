@@ -1,0 +1,10 @@
+[0;32m[2025-07-17 18:23:41][0m 🔧 Setting up environment...
+[0;32m[2025-07-17 18:23:41][0m package.json found locally
+[0;32m[2025-07-17 18:23:41][0m script.js found locally
+[0;32m[2025-07-17 18:23:41][0m Installing Node.js dependencies...
+[0;32m[2025-07-17 18:23:48][0m 🔍 Validating external scripts...
+[0;31m[2025-07-17 18:23:48] ERROR:[0m ❌ script.js has syntax errors
+[0;32m[2025-07-17 18:23:48][0m ✅ Setup completed!
+[0;32m[2025-07-17 18:23:48][0m 📝 Please configure your .env file with your RPC URL and private keys
+[0;32m[2025-07-17 18:23:48][0m 🚀 You can now use: node script.js [command] [args]
+[0;32m[2025-07-17 18:23:48][0m Script execution completed

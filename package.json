@@ -1,0 +1,15 @@
+{
+  "name": "wallet-automation",
+  "version": "1.0.0",
+  "description": "Automated wallet creation and trading",
+  "main": "wallet_manager.js",
+  "dependencies": {
+    "ethers": "^5.7.2",
+    "dotenv": "^16.0.3"
+  },
+  "scripts": {
+    "create": "node wallet_manager.js create",
+    "airdrop": "node wallet_manager.js airdrop",
+    "swap": "node wallet_manager.js swap"
+  }
+}
