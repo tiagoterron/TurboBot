@@ -1,4 +1,4 @@
-# 🚀 Wallet Automation Suite
+# 🚀 Turbo Microtx on Basechain
 
 A comprehensive Node.js automation tool for creating multiple wallets, distributing ETH via airdrops, and executing token swaps on Base network. Perfect for DeFi interactions, testing, and large-scale wallet management.
 
@@ -172,12 +172,6 @@ GAS_LIMIT=21000             # Custom gas limit
 
 ### Smart Features
 
-**🎯 Target-based Creation**: `createWalletsToTarget()` ensures exact wallet counts
-```bash
-# If you have 300 wallets and run:
-node script.js target 1000
-# Creates exactly 700 new wallets (total: 1000)
-```
 
 **💰 Proportional Distribution**: Airdrops divide total ETH evenly
 ```bash
