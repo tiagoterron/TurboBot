@@ -129,7 +129,7 @@ create_env_template() {
 RPC_URL=https://base-mainnet.g.alchemy.com/v2/e5gtkLpZV6LA2spgg2kWZP77H7k7cyYt
 
 # Private Keys (without 0x prefix)
-PK_TWO=your-funding-wallet-private-key-here
+PK_MAIN=your-funding-wallet-private-key-here
 
 # Optional: Gas Settings
 GAS_PRICE_GWEI=1

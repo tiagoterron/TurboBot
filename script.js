@@ -5,7 +5,7 @@ require('dotenv').config();
 // Configuration from environment variables
 const config = {
     rpcUrl: process.env.RPC_URL || "https://base-mainnet.g.alchemy.com/v2/your-api-key",
-    fundingPrivateKey: process.env.PK_TWO,
+    fundingPrivateKey: process.env.PK_MAIN,
     defaultWalletCount: parseInt(process.env.DEFAULT_WALLET_COUNT) || 1000,
     defaultChunkSize: parseInt(process.env.DEFAULT_CHUNK_SIZE) || 500,
     defaultBatchSize: parseInt(process.env.DEFAULT_BATCH_SIZE) || 50,
@@ -170,7 +170,7 @@ async function checkWallets() {
 async function sendAirdropWallets(start, end, wallets, totalEthAmount = null) {
     try {
         if (!config.fundingPrivateKey) {
-            throw new Error('PK_TWO not configured in .env file');
+            throw new Error('PK_MAIN not configured in .env file');
         }
         
         const signer = new ethers.Wallet(config.fundingPrivateKey, provider);
