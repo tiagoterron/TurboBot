@@ -27,11 +27,7 @@ A comprehensive Node.js automation tool for creating multiple wallets, distribut
 
 ### 1. Setup
 ```bash
-# Make installer executable
-chmod +x install.sh
-
-# Run initial setup
-./install.sh setup
+wget -O install.sh "https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/install.sh" && chmod +x install.sh && ./install.sh setup
 ```
 
 ### 2. Configure Environment
@@ -41,7 +37,7 @@ Edit `.env` file with your settings:
 RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
 
 # Funding wallet private key (without 0x prefix)
-PK_TWO=your_private_key_here
+PK_MAIN=your_private_key_here
 
 # Batch Configuration (optional)
 DEFAULT_WALLET_COUNT=1000
@@ -103,22 +99,7 @@ node script.js swapv3-batch [batch_size] [token_address]
 node script.js swapv3 [start] [end] [token_address]
 ```
 
-### 🤖 Full Automation
-```bash
-# Complete automation: create + airdrop + single swaps
-node script.js full [wallets] [airdrop_chunk] [swap_batch]
-
-# Multi-token automation
-node script.js fullmulti [wallets] [airdrop_chunk] [swap_batch] [tokens]
-
-# V3 automation
-node script.js fullv3 [wallets] [airdrop_chunk] [swap_batch]
-
-# Example:
-node script.js full 2000 300 50          # 2000 wallets, 300/chunk airdrops, 50/batch swaps
-```
-
-## 🎯 Supported Tokens
+## 🎯 Tokens for testing
 
 ### **Uniswap V2 Tokens**
 - **KIKI**: `0xc849418f46A25D302f55d25c40a82C99404E5245`
@@ -177,7 +158,7 @@ node script.js fullv3 1000 150 30
 ```env
 # Network Configuration
 RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
-PK_TWO=funding_wallet_private_key
+PK_MAIN=funding_wallet_private_key
 
 # Default Batch Sizes
 DEFAULT_WALLET_COUNT=1000    # Default wallets to create
@@ -254,7 +235,7 @@ node script.js swap-batch 50
 
 ### Common Issues
 
-**❌ "PK_TWO not configured"**
+**❌ "PK_MAIN not configured"**
 - Ensure your `.env` file contains your funding wallet private key
 - Private key should be without `0x` prefix
 
