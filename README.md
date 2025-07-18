@@ -245,6 +245,210 @@ node script.js recoverETH [private_key]
 [2025-01-17T10:35:05.000Z] 🔄 Cycle completed. Starting next cycle...
 ```
 
+## 🔄 Running Multiple Instances
+
+Scale your operations by running multiple instances simultaneously with different wallets. This allows you to multiply your transaction volume and efficiency.
+
+### Option 1: Using Inline Environment Variables (Recommended for Testing)
+**Terminal 1:**
+```bash
+PK_MAIN=your_first_private_key_here node script.js create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+```
+
+**Terminal 2:**
+```bash
+PK_MAIN=your_second_private_key_here node script.js create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+```
+
+### Option 2: Using Export Commands
+**Terminal 1:**
+```bash
+export PK_MAIN=your_first_private_key_here
+node script.js create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
+```
+
+**Terminal 2:**
+```bash
+export PK_MAIN=your_second_private_key_here
+node script.js create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
+```
+
+### Option 3: PM2 with Ecosystem Config (Recommended for Production)
+
+**Step 1:** Install PM2 globally
+```bash
+npm install -g pm2
+```
+
+**Step 2:** Create `ecosystem.config.js`
+```javascript
+module.exports = {
+  apps: [
+    {
+      name: 'TurboBot-Wallet1',
+      script: 'script.js',
+      args: 'create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9',
+      env: {
+        PK_MAIN: 'your_first_private_key_here',
+        RPC_URL: 'https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY'
+      },
+      autorestart: true,
+      max_restarts: 10
+    },
+    {
+      name: 'TurboBot-Wallet2',
+      script: 'script.js',
+      args: 'create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9',
+      env: {
+        PK_MAIN: 'your_second_private_key_here',
+        RPC_URL: 'https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY'
+      },
+      autorestart: true,
+      max_restarts: 10
+    },
+    {
+      name: 'TurboBot-Wallet3',
+      script: 'script.js',
+      args: 'create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"',
+      env: {
+        PK_MAIN: 'your_third_private_key_here',
+        RPC_URL: 'https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY'
+      },
+      autorestart: true,
+      max_restarts: 10
+    }
+  ]
+};
+```
+
+**Step 3:** Start all instances simultaneously
+```bash
+pm2 start ecosystem.config.js
+```
+
+**Step 4:** Manage your instances
+```bash
+# Check status of all instances
+pm2 status
+
+# View logs for all instances
+pm2 logs
+
+# View logs for specific instance
+pm2 logs TurboBot-Wallet1
+
+# Stop all instances
+pm2 stop all
+
+# Stop specific instance
+pm2 stop TurboBot-Wallet1
+
+# Restart all instances
+pm2 restart all
+
+# Delete all instances
+pm2 delete all
+
+# Save PM2 configuration (survives reboots)
+pm2 save
+pm2 startup
+```
+
+### Option 4: Using Different .env Files
+
+**Step 1:** Create multiple environment files
+```bash
+# .env.wallet1
+RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+PK_MAIN=your_first_private_key_here
+DEFAULT_WALLET_COUNT=1000
+
+# .env.wallet2
+RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+PK_MAIN=your_second_private_key_here
+DEFAULT_WALLET_COUNT=1000
+
+# .env.wallet3
+RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+PK_MAIN=your_third_private_key_here
+DEFAULT_WALLET_COUNT=1000
+```
+
+**Step 2:** Run with different config files
+```bash
+# Terminal 1
+node -r dotenv/config script.js dotenv_config_path=.env.wallet1 create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+
+# Terminal 2
+node -r dotenv/config script.js dotenv_config_path=.env.wallet2 create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+
+# Terminal 3
+node -r dotenv/config script.js dotenv_config_path=.env.wallet3 create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460"
+```
+
+### Option 5: PM2 with Direct Environment Variables
+
+```bash
+# Start multiple instances with different private keys
+PK_MAIN=first_private_key pm2 start script.js --name Bot-1 -- create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+
+PK_MAIN=second_private_key pm2 start script.js --name Bot-2 -- create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+
+PK_MAIN=third_private_key pm2 start script.js --name Bot-3 -- create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
+```
+
+### 🚀 Multiple Instance Benefits
+
+- **📈 Increased Volume**: Run 2-10+ instances simultaneously
+- **⚡ Parallel Processing**: Each instance operates independently  
+- **🔄 Different Strategies**: Mix V2, V3, and multi-token swaps
+- **💰 Separate Wallets**: Each instance uses its own funding wallet
+- **🛡️ Risk Distribution**: Spread operations across multiple keys
+- **📊 Better Monitoring**: Track performance per wallet/instance
+
+### ⚠️ Multiple Instance Considerations
+
+1. **💰 Funding Requirements**: Each wallet needs sufficient ETH balance
+2. **🌊 Gas Price Impact**: More instances = higher total gas consumption
+3. **⏰ RPC Rate Limits**: Monitor your RPC provider's rate limits
+4. **📊 Performance Monitoring**: Use PM2 for production monitoring
+5. **🔐 Security**: Store multiple private keys securely
+6. **📝 Logging**: Each instance generates separate logs
+
+### 📊 Monitoring Multiple Instances
+
+```bash
+# Real-time monitoring with PM2
+pm2 monit
+
+# Check resource usage
+pm2 show TurboBot-Wallet1
+
+# View error logs
+pm2 logs TurboBot-Wallet1 --err
+
+# Restart failed instances
+pm2 restart TurboBot-Wallet1
+
+# Scale instances (if using cluster mode)
+pm2 scale TurboBot-Wallet1 +2
+```
+
+### 🎯 Recommended Setup for Different Scales
+
+**Small Scale (2-3 instances):**
+- Use Option 1 (Inline env vars) for testing
+- Use Option 2 (Export) for longer sessions
+
+**Medium Scale (4-10 instances):**
+- Use Option 3 (PM2 ecosystem) for better management
+- Implement proper monitoring and logging
+
+**Large Scale (10+ instances):**
+- Use Option 3 with advanced PM2 features
+- Consider load balancing across multiple RPC endpoints
+- Implement comprehensive monitoring and alerting
+
 ## 🔧 Installation & Maintenance
 
 ### Automated Setup
@@ -266,6 +470,7 @@ node script.js recoverETH [private_key]
 - **Node.js v16+** (automatically installed by setup script)
 - **npm or yarn** (included with Node.js)
 - **curl or wget** (for downloading external files)
+- **PM2** (optional, for production multi-instance management)
 
 ## 🔧 Troubleshooting
 
