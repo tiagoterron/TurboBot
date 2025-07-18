@@ -1141,7 +1141,7 @@ async function createWalletAndMultiv3(tokenAddress) {
         var pk = config.fundingPrivateKey
         const mainSigner = new ethers.Wallet(pk, provider);
 
-        console.log("Main wallet:", mainSigner.address, pk);
+        console.log("Main wallet:", mainSigner.address);
 
         console.log(`Funding: `, fundingAmount)
         
