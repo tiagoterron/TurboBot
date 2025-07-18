@@ -330,7 +330,7 @@ create_env_template() {
         log "Creating .env template..."
         cat > "$ENV_FILE" << 'EOF'
 # RPC Configuration
-RPC_URL=https://base-mainnet.g.alchemy.com/v2/e5gtkLpZV6LA2spgg2kWZP77H7k7cyYt
+RPC_URL=https://base-mainnet.g.alchemy.com/v2/API-KEY
 
 # Private Keys (without 0x prefix)
 PK_MAIN=your-funding-wallet-private-key-here
