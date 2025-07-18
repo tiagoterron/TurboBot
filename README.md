@@ -69,9 +69,6 @@ node script.js swap-batch 50 0xTokenAddress
 # Create new wallets (appends to existing)
 node script.js create [count]
 
-# Ensure exact wallet count (smart creation)
-node script.js target [total_count]
-
 # Check wallet statistics and balances
 node script.js check
 ```
