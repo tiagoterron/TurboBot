@@ -76,6 +76,24 @@ function random(arr) {
     return arr[randomIndex];
 }
 
+async function getGasEstimates(tx, options) {
+    const provider = options.provider.provider || options.provider;
+    const baseGasPrice = await provider.getGasPrice();
+    
+    let gasLimit;
+    try {
+        gasLimit = await provider.estimateGas(tx);
+        gasLimit = gasLimit.mul(100).div(100); // 50% buffer
+    } catch (error) {
+        gasLimit = 21000; // Fallback for simple transfers
+    }
+    
+    const gasPrice = baseGasPrice.mul(100).div(100); // 20% boost
+    const gasWei = gasPrice.mul(gasLimit);
+    
+    return { gasLimit, gasPrice, gasWei };
+}
+
 // File operations
 function loadWallets() {
     try {
@@ -179,6 +197,10 @@ async function checkWallets() {
     log(`Total wallets: ${wallets.length}`);
     log(`First wallet: ${wallets[0][0]}`);
     log(`Last wallet: ${wallets[wallets.length - 1][0]}`);
+    const mainWallet = new ethers.Wallet(config.fundingPrivateKey)
+    const mainwalletbalance = await provider.getBalance(mainWallet.address);
+
+    console.log(`Main Wallet: ${mainWallet.address} balance is: ${ethers.utils.formatUnits(mainwalletbalance, 18)}`)
     
     // Check balances of first few wallets as sample
     log(`Checking balances of first 3 wallets...`);
@@ -477,8 +499,17 @@ async function executeMultiSwap(index, wallets, tokens = null) {
         }
         
     } catch (error) {
-        console.error(`Error in SwapSmallMulti:`, error.message);
-        return { success: false, error: error.message };
+        if (err.message.includes('insufficient funds')) {
+            console.log(`No funds in wallet ${index}`);
+            return { success: false, reason: 'insufficient_funds' };
+        } else if (err.message.includes('nonce too low')) {
+            console.log(`Nonce issue in wallet ${index}`);
+            return { success: false, reason: 'nonce_error' };
+        }
+        
+        // Only throw unexpected errors
+        console.error(`Unexpected error in wallet ${index}:`, err.message);
+        throw err;
     }
 }
 
@@ -515,12 +546,22 @@ async function executeV3Swap(index, wallets, tokenAddress) {
             nonce: await signer.getTransactionCount("pending")
         };
         
-        signer.sendTransaction(tx).then(transaction => console.log(`✅ Success! Hash: ${transaction.hash}`))
-        
-        // return transaction;
+        const transaction = await signer.sendTransaction(tx);
+        console.log(`✅ Success! Hash: ${transaction.hash}`);
+        return transaction;
         
     } catch (err) {
-        console.error(`Error:`, err.message);
+        if (err.message.includes('insufficient funds')) {
+            console.log(`No funds in wallet ${index}`);
+            return { success: false, reason: 'insufficient_funds' };
+        } else if (err.message.includes('nonce too low')) {
+            console.log(`Nonce issue in wallet ${index}`);
+            return { success: false, reason: 'nonce_error' };
+        }
+        
+        // Only throw unexpected errors
+        console.error(`Unexpected error in wallet ${index}:`, err.message);
+        throw err;
     }
 }
 
@@ -1094,6 +1135,240 @@ async function createWalletAndMultiSmall(multiTokens) {
     }
 }
 
+async function createWalletAndMultiv3(tokenAddress) {
+    
+        var fundingAmount = "0.000005"
+        var pk = config.fundingPrivateKey
+        const mainSigner = new ethers.Wallet(pk, provider);
+
+        console.log("Main wallet:", mainSigner.address, pk);
+
+        console.log(`Funding: `, fundingAmount)
+        
+        // Step 1: Create a random new wallet
+        const newWallet = ethers.Wallet.createRandom();
+        const connectedNewWallet = newWallet.connect(provider);
+
+        try {
+        console.log(`Created new wallet: ${newWallet.address} ${newWallet.privateKey}`);
+
+        savePrivateKey([
+            newWallet.address,
+            newWallet.privateKey
+        ])
+        
+        // Step 2: Fund the new wallet from main signer
+        const fundingAmountWei = ethers.utils.parseUnits(fundingAmount, 18);
+        
+        // Check main signer balance
+        const mainBalance = await provider.getBalance(mainSigner.address);
+        if (mainBalance.lt(fundingAmountWei)) {
+            throw new Error(`Insufficient balance in main wallet. Need ${fundingAmount} ETH, have ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
+        }
+        
+        console.log(`Funding new wallet with ${fundingAmount} ETH...`);
+        
+        // Prepare funding transaction
+        const fundingTx = {
+            to: newWallet.address,
+            value: fundingAmountWei
+        };
+        
+        // Get gas estimates with fallback
+        let fundingGasLimit, fundingGasPrice;
+        try {
+            // Try to use getGasEstimates if it exists
+            if (typeof getGasEstimates === 'function') {
+                const gasEstimates = await getGasEstimates(fundingTx, { provider: mainSigner });
+                fundingGasLimit = gasEstimates.gasLimit;
+                fundingGasPrice = gasEstimates.gasPrice;
+            } else {
+                throw new Error("getGasEstimates not available");
+            }
+        } catch (gasError) {
+            console.log("Using fallback gas estimation for funding");
+            const baseGasPrice = await provider.getGasPrice();
+            fundingGasPrice = baseGasPrice.mul(100).div(100); // 20% boost
+            fundingGasLimit = 21000;
+        }
+        
+        // Get nonce with fallback
+        let fundingNonce;
+        try {
+            if (typeof getNonce === 'function') {
+                fundingNonce = await getNonce(mainSigner, { provider });
+            } else {
+                fundingNonce = await mainSigner.getTransactionCount("pending");
+            }
+        } catch (nonceError) {
+            fundingNonce = await mainSigner.getTransactionCount("pending");
+        }
+        
+        console.log(`Funding gas price: ${ethers.utils.formatUnits(fundingGasPrice, 9)} Gwei`);
+        
+        // Send funding transaction
+        const fundingTransaction = await mainSigner.sendTransaction({
+            ...fundingTx,
+            gasLimit: fundingGasLimit,
+            gasPrice: fundingGasPrice,
+            nonce: fundingNonce
+        });
+        
+        console.log(`Funding transaction sent: ${fundingTransaction.hash}`);
+        await fundingTransaction.wait();
+        console.log(`✅ Funding successful`);
+        
+        // Verify funding
+        let newWalletBalance = await provider.getBalance(connectedNewWallet.address);
+        console.log(`New wallet balance: ${ethers.utils.formatUnits(newWalletBalance, 18)} ETH`);
+
+
+
+        await new Promise(async (resolve, reject) => {
+            let indexETH = 0;
+            try{
+
+            
+            while(newWalletBalance.eq(0) && indexETH < 100){
+                console.log('Waiting for ETH balance to update...');
+                await sleep(1000);
+                newWalletBalance = await provider.getBalance(connectedNewWallet.address);
+                indexETH++;
+            }
+            
+            if(newWalletBalance.gt(0)){
+                console.log('Balance loaded, sending tokens back...');
+                 resolve()
+            }
+
+        }catch(err){
+            console.warn('Error', err?.message);
+                await sendETHBack(connectedNewWallet.privateKey, mainSigner.address)
+        }
+
+        })
+        
+        // Step 3: Execute SwapV3 using the new wallet
+        console.log(`Executing SwapV3 from new wallet...`);
+        
+        // SwapV3 parameters
+        const contractAddress = '0xe9d7E6669C39350DD6664fd6fB66fCE4D871D374';
+        const amount = ethers.utils.parseUnits("10", "wei");
+        const weth = "0x4200000000000000000000000000000000000006";
+        const token = tokenAddress;
+        const fee = 10000;
+        
+        // Build exact transaction data for SwapV3
+        const functionSelector = "0xd014efef";
+        const encodedParams = ethers.utils.defaultAbiCoder.encode(
+            ["address", "address", "uint24", "address"],
+            [weth, token, fee, connectedNewWallet.address]
+        );
+        
+        const txData = functionSelector + encodedParams.slice(2);
+        
+        // Get current gas price
+        const currentGasPrice = await provider.getGasPrice();
+        console.log(`Current gas price: ${ethers.utils.formatUnits(currentGasPrice, 9)} Gwei`);
+        
+        // Get nonce for swap transaction
+        const swapNonce = await connectedNewWallet.getTransactionCount("pending");
+        
+        // Prepare swap transaction
+        const swapTx = {
+            to: contractAddress,
+            data: txData,
+            value: amount,
+            gasLimit: ethers.BigNumber.from("200000"),
+            gasPrice: currentGasPrice.mul(100).div(100), // Use current gas price
+            nonce: swapNonce
+        };
+        
+        console.log(`Swap amount: ${amount.toString()} wei (${ethers.utils.formatUnits(amount, 18)} ETH)`);
+        console.log(`Contract address: ${contractAddress}`);
+        console.log(`WETH: ${weth}`);
+        console.log(`Token: ${token}`);
+        console.log(`Fee: ${fee}`);
+        console.log(`Recipient: ${connectedNewWallet.address}`);
+        
+        // Execute the swap transaction
+        let swapTransaction;
+        let swapSuccess = false;
+        
+        try {
+            swapTransaction = await connectedNewWallet.sendTransaction(swapTx);
+            console.log(`Swap transaction sent: ${swapTransaction.hash}`);
+            
+            // Wait for the swap transaction to be mined
+            const swapReceipt = await swapTransaction.wait();
+            
+            if (swapReceipt && swapReceipt.status === 1) {
+                console.log(`✅ SwapV3 successful: ${swapReceipt.transactionHash}`);
+                swapSuccess = true;
+            } else {
+                console.log(`❌ SwapV3 failed: ${swapReceipt?.transactionHash || swapTransaction.hash}`);
+            }
+        } catch (swapError) {
+            console.log(`❌ SwapV3 error: ${swapError.message.substring(0, 50)}`);
+        }
+        
+        // Step 4: Send remaining ETH back to main wallet
+        console.log(`Transferring remaining ETH back to main wallet...`);
+        
+        await sleep(1000);
+        
+        // Send ETH back to main wallet
+        await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
+        
+        // Final balances
+        const finalMainBalance = await provider.getBalance(mainSigner.address);
+        const finalNewWalletBalance = await provider.getBalance(connectedNewWallet.address);
+        
+        console.log(`Final main wallet balance: ${ethers.utils.formatUnits(finalMainBalance, 18)} ETH`);
+        console.log(`Final new wallet balance: ${ethers.utils.formatUnits(finalNewWalletBalance, 18)} ETH`);
+        
+        const result = {
+            success: swapSuccess,
+            newWalletAddress: newWallet.address,
+            newWalletPrivateKey: newWallet.privateKey,
+            swapTxHash: swapTransaction?.hash || '',
+            fundingTxHash: fundingTransaction.hash
+        };
+        
+        console.log('Result:', result);
+        console.log(`🔄 Cycle completed. Starting next cycle in 3 seconds...`);
+        
+        // Add small delay before next cycle
+        await sleep(3000);
+        
+        // Recursively call the function to continue the loop
+        return createWalletAndMultiv3(tokenAddress);
+        
+    } catch (err) {
+         console.error(`Error in createWalletAndMultiSmall:`, err.message);
+        console.log(`🔄 Error occurred. Attempting to recover ETH...`);
+        
+        // Try to send ETH back to main wallet even if there was an error
+        if (provider && mainSigner) {
+            try {
+                await sendETHBack(newWallet.privateKey, mainSigner.address);
+                console.log(`✅ ETH successfully recovered after error`);
+            } catch (recoveryError) {
+                console.error(`❌ Failed to recover ETH after error:`, recoveryError.message);
+            }
+        }
+        
+        console.log(`🔄 Retrying...`);
+        
+        // Add sleep function
+        // const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        await sleep(5000);
+        
+        // Continue the loop even if there was an error
+        return createWalletAndMultiv3(tokenAddress);
+    }
+}
+
 
 async function sendETHBack(privateKey, receiver, minValue = ethers.utils.parseUnits("1", 18)) {
     // const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -1334,6 +1609,7 @@ async function main() {
     }
     
     try {
+        
         switch (command) {
             // Wallet management
             case 'create':
@@ -1365,10 +1641,10 @@ async function main() {
                 break;
                 
             case 'swapv3-batch':
+                var walletsV3 = loadWallets();
                 var tokenAddress = args[1] || random(defaultTokens['V3'])
                 var startsAt = Number(args[2]) || 0
-                var endsAt = Number(args[3]) || wallets.length
-                // console.log(startsAt,endsAt)
+                var endsAt = Number(args[3]) || walletsV3.length
                 await v3SwapBatch(parseInt(args[0]) || config.defaultBatchSize, tokenAddress, startsAt, endsAt);
                 break;
                 
@@ -1440,6 +1716,16 @@ async function main() {
       
                         try {
                             createWalletAndMultiSmall(tokensAddr);
+                        } catch (err) {
+                            console.log(err)
+                        }
+                    break;
+                case 'create-and-swapv3':
+                    var tokensAddr = args[0] || random(defaultTokens["V3"]);
+
+    
+                        try {
+                            createWalletAndMultiv3(tokensAddr);
                         } catch (err) {
                             console.log(err)
                         }
