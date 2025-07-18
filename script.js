@@ -20,7 +20,7 @@ const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
 
 const contracts = {
     uniswapRouter: "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24",
-    airdropContract: "0x2084eE02Ad0df72DfA3cAFc7f90d23D5663c3880",
+    airdropContract: "0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3",
     multicallSwap: "0x0D99F3072fDbEDFFFf920f166F3B5d7e2bE32Ba0",
     v3SwapContract: "0xe9d7E6669C39350DD6664fd6fB66fCE4D871D374"
 };
@@ -255,7 +255,7 @@ async function sendAirdropWallets(start, end, wallets, totalEthAmount = null) {
         
         // Setup airdrop contract
         const abi = ["function sendAirdropETH(address[] calldata recipients) external payable"];
-        const airdrop = new ethers.Contract("0x2084eE02Ad0df72DfA3cAFc7f90d23D5663c3880", abi, signer);
+        const airdrop = new ethers.Contract("0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3", abi, signer);
         
         // Prepare transaction data
         const tx = {
@@ -603,7 +603,7 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
     // Setup contract once for all chunks
     const signer = new ethers.Wallet(config.fundingPrivateKey, provider);
     const abi = ["function sendAirdropETH(address[] calldata recipients) external payable"];
-    const airdrop = new ethers.Contract("0x2084eE02Ad0df72DfA3cAFc7f90d23D5663c3880", abi, signer);
+    const airdrop = new ethers.Contract("0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3", abi, signer);
     
     let totalSuccessful = 0;
     let totalFailed = 0;
