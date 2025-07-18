@@ -2,3 +2,4 @@
 node_modules
 wallets.json
 ecosystem.config.js
+pm2.config.js

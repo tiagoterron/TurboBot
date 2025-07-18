@@ -1709,9 +1709,6 @@ module.exports = {
     swapBatch,
     multiSwapBatch,
     v3SwapBatch,
-    fullAutomation,
-    fullMultiAutomation,
-    fullV3Automation,
     loadWallets,
     saveWallets
 };
