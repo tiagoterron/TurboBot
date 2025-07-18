@@ -1,6 +1,6 @@
 # 🚀 Turbo Microtx on Basechain
 
-A comprehensive open-source Node.js automation tool for creating multiple wallets, distributing ETH via airdrops, and executing token swaps on Base network. Perfect for DeFi interactions, testing, and large-scale wallet management.
+An open-source Node.js automation tool for creating multiple wallets, distributing ETH via airdrops, and executing token swaps on Base network. Perfect for DeFi interactions, testing, and large-scale wallet management.
 
 > **📢 Open Source Project**: This project is completely open source and free to use. Feel free to fork, modify, and distribute according to your needs!
 
