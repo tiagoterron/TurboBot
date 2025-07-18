@@ -14,6 +14,10 @@ LOG_FILE="$SCRIPT_DIR/automation.log"
 WALLET_MANAGER_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js"
 PACKAGE_JSON_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/package.json"
 
+# Node.js configuration
+NODEJS_MIN_VERSION="16"
+NVM_INSTALL_URL="https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -32,6 +36,206 @@ error_log() {
 
 warning_log() {
     echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1" | tee -a "$LOG_FILE"
+}
+
+# Function to get system information
+get_system_info() {
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo "linux"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "macos"
+    elif [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+        echo "windows"
+    else
+        echo "unknown"
+    fi
+}
+
+# Function to check Node.js version
+check_nodejs_version() {
+    if command -v node &> /dev/null; then
+        local current_version=$(node --version | sed 's/v//' | cut -d. -f1)
+        if [[ $current_version -ge $NODEJS_MIN_VERSION ]]; then
+            log "✅ Node.js version $(node --version) is installed and compatible"
+            return 0
+        else
+            warning_log "Node.js version $(node --version) is too old. Minimum required: v${NODEJS_MIN_VERSION}"
+            return 1
+        fi
+    else
+        warning_log "Node.js is not installed"
+        return 1
+    fi
+}
+
+# Function to install Node.js via package manager (Linux/macOS)
+install_nodejs_package_manager() {
+    local system=$(get_system_info)
+    
+    case $system in
+        linux)
+            if command -v apt-get &> /dev/null; then
+                log "📦 Installing Node.js via apt-get..."
+                sudo apt-get update
+                sudo apt-get install -y nodejs npm
+            elif command -v yum &> /dev/null; then
+                log "📦 Installing Node.js via yum..."
+                sudo yum install -y nodejs npm
+            elif command -v dnf &> /dev/null; then
+                log "📦 Installing Node.js via dnf..."
+                sudo dnf install -y nodejs npm
+            elif command -v pacman &> /dev/null; then
+                log "📦 Installing Node.js via pacman..."
+                sudo pacman -S nodejs npm
+            elif command -v zypper &> /dev/null; then
+                log "📦 Installing Node.js via zypper..."
+                sudo zypper install -y nodejs npm
+            else
+                error_log "No supported package manager found for Linux"
+                return 1
+            fi
+            ;;
+        macos)
+            if command -v brew &> /dev/null; then
+                log "📦 Installing Node.js via Homebrew..."
+                brew install node
+            else
+                error_log "Homebrew not found. Please install Homebrew first or install Node.js manually"
+                return 1
+            fi
+            ;;
+        *)
+            error_log "Unsupported system for automatic Node.js installation"
+            return 1
+            ;;
+    esac
+}
+
+# Function to install Node.js via NVM
+install_nodejs_nvm() {
+    log "📦 Installing Node.js via NVM..."
+    
+    # Download and install NVM
+    if command -v curl &> /dev/null; then
+        curl -o- "$NVM_INSTALL_URL" | bash
+    elif command -v wget &> /dev/null; then
+        wget -qO- "$NVM_INSTALL_URL" | bash
+    else
+        error_log "Neither curl nor wget found. Cannot install NVM."
+        return 1
+    fi
+    
+    # Source NVM
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    
+    # Install latest LTS Node.js
+    if command -v nvm &> /dev/null; then
+        log "Installing latest LTS Node.js via NVM..."
+        nvm install --lts
+        nvm use --lts
+        nvm alias default lts/*
+        log "✅ Node.js installed via NVM"
+        return 0
+    else
+        error_log "NVM installation failed"
+        return 1
+    fi
+}
+
+# Function to install Node.js with user choice
+install_nodejs() {
+    local system=$(get_system_info)
+    
+    log "🔧 Node.js installation required..."
+    echo ""
+    echo "Choose installation method:"
+    echo "1) Package Manager (recommended for most users)"
+    echo "2) NVM (Node Version Manager - recommended for developers)"
+    echo "3) Manual installation (visit nodejs.org)"
+    echo "4) Skip installation"
+    echo ""
+    
+    read -p "Enter your choice (1-4): " choice
+    
+    case $choice in
+        1)
+            if install_nodejs_package_manager; then
+                log "✅ Node.js installed via package manager"
+            else
+                error_log "Package manager installation failed"
+                return 1
+            fi
+            ;;
+        2)
+            if install_nodejs_nvm; then
+                log "✅ Node.js installed via NVM"
+            else
+                error_log "NVM installation failed"
+                return 1
+            fi
+            ;;
+        3)
+            echo ""
+            log "📝 Manual installation instructions:"
+            echo "1. Visit https://nodejs.org"
+            echo "2. Download the LTS version for your system"
+            echo "3. Install the downloaded package"
+            echo "4. Restart your terminal and run this script again"
+            echo ""
+            exit 0
+            ;;
+        4)
+            warning_log "Skipping Node.js installation. Script may not work properly."
+            return 1
+            ;;
+        *)
+            error_log "Invalid choice. Please run the script again."
+            return 1
+            ;;
+    esac
+    
+    # Verify installation
+    if check_nodejs_version; then
+        log "✅ Node.js installation verified"
+        return 0
+    else
+        error_log "Node.js installation verification failed"
+        return 1
+    fi
+}
+
+# Function to ensure Node.js is available
+ensure_nodejs() {
+    if ! check_nodejs_version; then
+        log "🔧 Node.js setup required..."
+        
+        # Auto-install attempt
+        echo ""
+        echo "Node.js is required for this script to work."
+        echo "Would you like to install it automatically? (y/n)"
+        read -p "Install Node.js? [y/N]: " install_choice
+        
+        if [[ $install_choice =~ ^[Yy]$ ]]; then
+            if ! install_nodejs; then
+                error_log "Node.js installation failed. Please install manually."
+                exit 1
+            fi
+        else
+            error_log "Node.js is required. Please install it manually and run the script again."
+            echo ""
+            echo "Installation options:"
+            echo "1. Visit https://nodejs.org and download the LTS version"
+            echo "2. Use your system's package manager:"
+            echo "   - Ubuntu/Debian: sudo apt-get install nodejs npm"
+            echo "   - CentOS/RHEL: sudo yum install nodejs npm"
+            echo "   - macOS: brew install node"
+            echo "3. Use NVM: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash"
+            echo ""
+            exit 1
+        fi
+    fi
 }
 
 # Function to download file with curl or wget
@@ -115,7 +319,7 @@ install_dependencies() {
     elif command -v yarn &> /dev/null; then
         yarn install
     else
-        error_log "Neither npm nor yarn found. Please install Node.js and npm."
+        error_log "Neither npm nor yarn found. This shouldn't happen after Node.js installation."
         exit 1
     fi
 }
@@ -227,9 +431,10 @@ show_help() {
     echo -e "${BLUE}Wallet Automation Script (External JS Mode)${NC}"
     echo ""
     echo "Setup Commands:"
-    echo "  $0 setup                 - Initial setup (download files, install dependencies)"
+    echo "  $0 setup                 - Initial setup (install Node.js, download files, install dependencies)"
     echo "  $0 update                - Update external scripts to latest version"
     echo "  $0 validate              - Validate external script files"
+    echo "  $0 check-node            - Check Node.js installation"
     echo ""
     echo "All wallet operations are handled by the external script.js:"
     echo ""
@@ -269,12 +474,18 @@ show_help() {
     echo "External Files:"
     echo "  script.js: $WALLET_MANAGER_URL"
     echo "  package.json:      $PACKAGE_JSON_URL"
+    echo ""
+    echo "System Requirements:"
+    echo "  - Node.js v${NODEJS_MIN_VERSION}+ (will be installed automatically if missing)"
+    echo "  - npm or yarn (included with Node.js)"
+    echo "  - curl or wget (for downloading external files)"
 }
 
 # Parse command line arguments
 case ${1:-help} in
     setup)
         log "🔧 Setting up environment..."
+        ensure_nodejs
         check_package_json
         check_node_script
         create_env_template
@@ -286,17 +497,28 @@ case ${1:-help} in
         ;;
     update)
         log "🔄 Updating external scripts..."
+        ensure_nodejs
         update_external_scripts
         validate_scripts
         log "✅ Update completed!"
         ;;
     validate)
         log "🔍 Validating scripts..."
+        ensure_nodejs
         if validate_scripts; then
             log "✅ All scripts are valid"
         else
             error_log "❌ Script validation failed"
             exit 1
+        fi
+        ;;
+    check-node)
+        log "🔍 Checking Node.js installation..."
+        if check_nodejs_version; then
+            log "✅ Node.js is properly installed"
+        else
+            warning_log "Node.js is not installed or version is too old"
+            log "Run '$0 setup' to install Node.js automatically"
         fi
         ;;
     help|*)
