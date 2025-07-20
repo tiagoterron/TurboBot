@@ -1,6 +1,6 @@
 # 🚀 Turbo Microtx on Basechain
 
-An open-source Node.js automation tool for creating multiple wallets, distributing ETH via airdrops, and executing token swaps on Base network. Perfect for DeFi interactions, testing, and large-scale wallet management.
+An open-source Node.js automation tool for creating multiple wallets, distributing ETH via airdrops, deploying VolumeSwap contracts, and executing automated token swaps on Base network. Perfect for DeFi interactions, volume generation, testing, and large-scale wallet management.
 
 > **📢 Open Source Project**: This project is completely open source and free to use. Feel free to fork, modify, and distribute according to your needs!
 
@@ -8,6 +8,9 @@ An open-source Node.js automation tool for creating multiple wallets, distributi
 
 - **📝 Wallet Management**: Create thousands of wallets with automatic JSON storage
 - **💰 Smart Airdrops**: Distribute ETH with customizable total amounts and batch sizes
+- **🏭 Contract Deployment**: Deploy VolumeSwap contracts for any token automatically
+- **📊 Volume Generation**: Infinite volume bot with balance validation and monitoring
+- **💸 Fund Withdrawal**: Comprehensive withdrawal system for all deployed contracts
 - **🔄 Multi-Protocol Swaps**: Support for Uniswap V2, V3, and multi-token swaps
 - **⚡ Batch Processing**: Efficient parallel processing with configurable batch sizes
 - **🛡️ Error Handling**: Robust error handling with detailed logging
@@ -66,8 +69,11 @@ node script.js create 1000
 # Distribute 5 ETH among all wallets
 node script.js airdrop-batch 200 5.0
 
-# Execute token swaps
-node script.js swap-batch 50 0xTokenAddress
+# Deploy VolumeSwap contract for a token
+node script.js deploy 0xTokenAddress
+
+# Execute infinite volume generation
+node script.js volumeV2 0 100 0xTokenAddress
 ```
 
 ## 📖 Command Reference
@@ -97,6 +103,47 @@ node script.js airdrop-batch 200 10.0    # 10 ETH across all wallets
 node script.js airdrop 0 100 0.5         # 0.5 ETH to first 100 wallets
 ```
 
+### 🏭 Contract Deployment & Management (NEW!)
+```bash
+# Deploy VolumeSwap contract for any token
+node script.js deploy [token_address]
+
+# Examples:
+node script.js deploy 0xc849418f46A25D302f55d25c40a82C99404E5245  # Deploy for KIKI
+node script.js deploy 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460  # Deploy for TURBO
+```
+
+### 📊 Infinite Volume Generation (NEW!)
+```bash
+# Run infinite volume bot with balance validation
+node script.js volumeV2 [start] [end] [token_address]
+
+# Examples:
+node script.js volumeV2                                           # All wallets, random token
+node script.js volumeV2 0 500                                     # First 500 wallets, random token
+node script.js volumeV2 0 100 0xc849418f46A25D302f55d25c40a82C99404E5245  # Specific range and token
+
+# Features:
+# - Automatically finds or deploys contract for token
+# - Validates contract has ETH/token balance before starting
+# - Infinite loop with cycle tracking and statistics
+# - Automatic error recovery and wallet management
+# - Real-time progress monitoring and success rates
+```
+
+### 💸 Fund Withdrawal (NEW!)
+```bash
+# Withdraw from specific contract address
+node script.js withdraw [contract_address] [token_address]
+
+# Withdraw using token address (finds contract automatically)
+node script.js withdraw-token [token_address]
+
+# Examples:
+node script.js withdraw 0xContractAddress123...                   # Withdraw from specific contract
+node script.js withdraw-token 0xc849418f46A25D302f55d25c40a82C99404E5245  # Find and withdraw KIKI contract
+```
+
 ### 🔄 Swap Operations
 ```bash
 # Single token swaps
@@ -112,7 +159,7 @@ node script.js swapv3-batch [batch_size] [token_address] [start] [end]
 node script.js swapv3 [start] [end] [token_address]
 ```
 
-### 🔄 Continuous Automation (New!)
+### 🔄 Continuous Automation
 ```bash
 # Create wallet, fund, swap multiple tokens, and recover ETH in infinite loop
 node script.js create-and-swap [token1,token2,token3]
@@ -153,6 +200,25 @@ node script.js airdrop-batch 200 5.0
 node script.js swap-batch 50
 ```
 
+### Advanced Volume Generation Workflow (NEW!)
+```bash
+# 1. Create wallets and fund them
+node script.js create 500
+node script.js airdrop-batch 100 2.0
+
+# 2. Deploy VolumeSwap contract for your token
+node script.js deploy 0xc849418f46A25D302f55d25c40a82C99404E5245
+
+# 3. Fund the deployed contract with ETH and tokens
+# (Send ETH and tokens to the contract address shown after deployment)
+
+# 4. Start infinite volume generation
+node script.js volumeV2 0 500 0xc849418f46A25D302f55d25c40a82C99404E5245
+
+# 5. Withdraw funds when done
+node script.js withdraw-token 0xc849418f46A25D302f55d25c40a82C99404E5245
+```
+
 ### Advanced Multi-Token Strategy
 ```bash
 # Create exactly 2000 wallets
@@ -165,7 +231,7 @@ node script.js airdrop-batch 100 20.0
 node script.js multiswap-batch 25 "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
 ```
 
-### Continuous Automation (NEW!)
+### Continuous Automation
 ```bash
 # Infinite loop: Create wallet → Fund → Multi-swap → Recover ETH
 node script.js create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
@@ -176,6 +242,32 @@ node script.js create-and-swapv3 0xf83cde146AC35E99dd61b6448f7aD9a4534133cc
 # Emergency ETH recovery from any wallet
 node script.js recoverETH your_private_key_here 0xYourMainWalletAddress
 ```
+
+## 🏭 VolumeSwap Contract Features
+
+The bot includes a powerful VolumeSwap contract deployment and management system:
+
+### **Contract Capabilities**
+- **🤖 Automated Trading**: Smart buy/sell logic based on contract balances
+- **🎲 Random Amounts**: Uses randomized percentages for natural trading patterns
+- **⚖️ Balance Management**: Automatically switches between buying and selling
+- **🔧 Owner Controls**: Configurable buy/sell percentages and maximum buy amounts
+- **💸 Fund Recovery**: Complete withdrawal system for ETH and tokens
+
+### **Deployment Process**
+1. **Deploy Contract**: `node script.js deploy [token_address]`
+2. **Fund Contract**: Send ETH and tokens to the deployed contract address
+3. **Generate Volume**: `node script.js volumeV2 [range] [token_address]`
+4. **Monitor Progress**: Real-time stats and cycle tracking
+5. **Withdraw Funds**: `node script.js withdraw-token [token_address]`
+
+### **Volume Generation Features**
+- **🔍 Balance Validation**: Checks contract has sufficient ETH/token balance
+- **🔄 Infinite Loops**: Continuous operation with cycle tracking
+- **📊 Smart Logic**: Buys when ETH available, sells when tokens available
+- **📈 Statistics**: Real-time success rates and performance metrics
+- **🛡️ Error Recovery**: Automatic retry and error handling
+- **⏸️ Graceful Control**: Easy stop with Ctrl+C
 
 ## ⚙️ Configuration Options
 
@@ -203,6 +295,12 @@ GAS_LIMIT=21000             # Custom gas limit
 node script.js airdrop-batch 200 10.0
 ```
 
+**🏭 Smart Contract Management**: Automatic deployment and balance validation
+```bash
+# Automatically deploys if contract doesn't exist
+node script.js volumeV2 0 100 0xTokenAddress
+```
+
 **🔄 Random Token Selection**: Uses random tokens when none specified
 ```bash
 # Automatically selects random V2 tokens
@@ -222,6 +320,50 @@ node script.js recoverETH [private_key]
 ```
 
 ## 📊 Output Examples
+
+### Contract Deployment
+```
+[2025-01-17T10:30:00.000Z] Deploying from main wallet: 0x123...ABC
+[2025-01-17T10:30:00.000Z] Token address: 0xc849418f46A25D302f55d25c40a82C99404E5245
+[2025-01-17T10:30:01.000Z] ✅ Deploy SUCCESS: 0xDEF456...
+[2025-01-17T10:30:01.000Z] 📄 Deployed contract address: 0x789...GHI
+[2025-01-17T10:30:01.000Z] 🚨 IMPORTANT NEXT STEPS:
+[2025-01-17T10:30:01.000Z] 📤 You must now send funds (ETH/tokens) to: 0x789...GHI
+[2025-01-17T10:30:01.000Z] ⚠️  Make sure to transfer tokens before running swap operations!
+```
+
+### Volume Generation
+```
+[2025-01-17T10:35:00.000Z] 🎯 Starting VolumeV2 for token: 0xc849418f46A25D302f55d25c40a82C99404E5245
+[2025-01-17T10:35:00.000Z] ✅ Using existing contract: 0x789...GHI
+[2025-01-17T10:35:01.000Z] 🔍 Checking contract balances...
+[2025-01-17T10:35:01.000Z] 💰 Contract ETH balance: 2.5 ETH
+[2025-01-17T10:35:01.000Z] 🪙 Contract KIKI balance: 50,000.0 KIKI
+[2025-01-17T10:35:01.000Z] ✅ Contract has both ETH and token balance - full buy/sell functionality available
+[2025-01-17T10:35:02.000Z] 🔄 Starting infinite volume bot loop for wallets 0-100
+[2025-01-17T10:35:03.000Z] 📊 Cycle 1 - Wallet 1/100 (Index: 0)
+[2025-01-17T10:35:04.000Z] ✅ Wallet 0 successful (Total success: 1)
+...
+[2025-01-17T10:37:00.000Z] 🔄 Cycle 1 completed! Starting new cycle...
+[2025-01-17T10:37:00.000Z] 📈 Cumulative Stats:
+[2025-01-17T10:37:00.000Z]    • Total Processed: 100
+[2025-01-17T10:37:00.000Z]    • Successful: 95
+[2025-01-17T10:37:00.000Z]    • Failed: 5
+[2025-01-17T10:37:00.000Z]    • Success Rate: 95.00%
+[2025-01-17T10:37:00.000Z] 🔄 Looping back to wallet 0
+```
+
+### Fund Withdrawal
+```
+[2025-01-17T10:40:00.000Z] 🏦 Withdrawing from contract: 0x789...GHI
+[2025-01-17T10:40:01.000Z] 🔍 Checking contract balances before withdrawal...
+[2025-01-17T10:40:01.000Z] 💰 Contract ETH balance: 1.8 ETH
+[2025-01-17T10:40:01.000Z] 🪙 Contract KIKI balance: 25,000.0 KIKI
+[2025-01-17T10:40:02.000Z] ✅ Withdrawal SUCCESS: 0xABC123...
+[2025-01-17T10:40:02.000Z] 📈 ETH withdrawn: 1.8 ETH
+[2025-01-17T10:40:02.000Z] 📈 KIKI withdrawn: 25,000.0 KIKI
+[2025-01-17T10:40:02.000Z] 📊 Net ETH gain: 1.75 ETH
+```
 
 ### Wallet Creation
 ```
@@ -252,25 +394,25 @@ Scale your operations by running multiple instances simultaneously with differen
 ### Option 1: Using Inline Environment Variables (Recommended for Testing)
 **Terminal 1:**
 ```bash
-PK_MAIN=your_first_private_key_here node script.js create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+PK_MAIN=your_first_private_key_here node script.js volumeV2 0 100 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
 ```
 
 **Terminal 2:**
 ```bash
-PK_MAIN=your_second_private_key_here node script.js create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+PK_MAIN=your_second_private_key_here node script.js volumeV2 100 200 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
 ```
 
 ### Option 2: Using Export Commands
 **Terminal 1:**
 ```bash
 export PK_MAIN=your_first_private_key_here
-node script.js create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
+node script.js volumeV2 0 250 "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460"
 ```
 
 **Terminal 2:**
 ```bash
 export PK_MAIN=your_second_private_key_here
-node script.js create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
+node script.js volumeV2 250 500 "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460"
 ```
 
 ### Option 3: PM2 with Ecosystem Config (Recommended for Production)
@@ -285,9 +427,9 @@ npm install -g pm2
 module.exports = {
   apps: [
     {
-      name: 'TurboBot-Wallet1',
+      name: 'VolumeBot-Wallet1',
       script: 'script.js',
-      args: 'create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9',
+      args: 'volumeV2 0 200 0xc849418f46A25D302f55d25c40a82C99404E5245',
       env: {
         PK_MAIN: 'your_first_private_key_here',
         RPC_URL: 'https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY'
@@ -296,9 +438,9 @@ module.exports = {
       max_restarts: 10
     },
     {
-      name: 'TurboBot-Wallet2',
+      name: 'VolumeBot-Wallet2',
       script: 'script.js',
-      args: 'create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9',
+      args: 'volumeV2 200 400 0xc849418f46A25D302f55d25c40a82C99404E5245',
       env: {
         PK_MAIN: 'your_second_private_key_here',
         RPC_URL: 'https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY'
@@ -307,7 +449,7 @@ module.exports = {
       max_restarts: 10
     },
     {
-      name: 'TurboBot-Wallet3',
+      name: 'TraditionalBot-Wallet3',
       script: 'script.js',
       args: 'create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"',
       env: {
@@ -335,13 +477,13 @@ pm2 status
 pm2 logs
 
 # View logs for specific instance
-pm2 logs TurboBot-Wallet1
+pm2 logs VolumeBot-Wallet1
 
 # Stop all instances
 pm2 stop all
 
 # Stop specific instance
-pm2 stop TurboBot-Wallet1
+pm2 stop VolumeBot-Wallet1
 
 # Restart all instances
 pm2 restart all
@@ -377,10 +519,10 @@ DEFAULT_WALLET_COUNT=1000
 **Step 2:** Run with different config files
 ```bash
 # Terminal 1
-node -r dotenv/config script.js dotenv_config_path=.env.wallet1 create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+node -r dotenv/config script.js dotenv_config_path=.env.wallet1 volumeV2 0 300 0xc849418f46A25D302f55d25c40a82C99404E5245
 
 # Terminal 2
-node -r dotenv/config script.js dotenv_config_path=.env.wallet2 create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+node -r dotenv/config script.js dotenv_config_path=.env.wallet2 volumeV2 300 600 0xc849418f46A25D302f55d25c40a82C99404E5245
 
 # Terminal 3
 node -r dotenv/config script.js dotenv_config_path=.env.wallet3 create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460"
@@ -389,31 +531,33 @@ node -r dotenv/config script.js dotenv_config_path=.env.wallet3 create-and-swap 
 ### Option 5: PM2 with Direct Environment Variables
 
 ```bash
-# Start multiple instances with different private keys
-PK_MAIN=first_private_key pm2 start script.js --name Bot-1 -- create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+# Start multiple volume bot instances with different private keys
+PK_MAIN=first_private_key pm2 start script.js --name VolumeBot-1 -- volumeV2 0 200 0xc849418f46A25D302f55d25c40a82C99404E5245
 
-PK_MAIN=second_private_key pm2 start script.js --name Bot-2 -- create-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9
+PK_MAIN=second_private_key pm2 start script.js --name VolumeBot-2 -- volumeV2 200 400 0xc849418f46A25D302f55d25c40a82C99404E5245
 
-PK_MAIN=third_private_key pm2 start script.js --name Bot-3 -- create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
+PK_MAIN=third_private_key pm2 start script.js --name TraditionalBot-3 -- create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
 ```
 
 ### 🚀 Multiple Instance Benefits
 
 - **📈 Increased Volume**: Run 2-10+ instances simultaneously
 - **⚡ Parallel Processing**: Each instance operates independently  
-- **🔄 Different Strategies**: Mix V2, V3, and multi-token swaps
+- **🔄 Different Strategies**: Mix volume generation and traditional swaps
 - **💰 Separate Wallets**: Each instance uses its own funding wallet
 - **🛡️ Risk Distribution**: Spread operations across multiple keys
 - **📊 Better Monitoring**: Track performance per wallet/instance
+- **🏭 Contract Sharing**: Multiple instances can use the same deployed contract
 
 ### ⚠️ Multiple Instance Considerations
 
 1. **💰 Funding Requirements**: Each wallet needs sufficient ETH balance
-2. **🌊 Gas Price Impact**: More instances = higher total gas consumption
-3. **⏰ RPC Rate Limits**: Monitor your RPC provider's rate limits
-4. **📊 Performance Monitoring**: Use PM2 for production monitoring
-5. **🔐 Security**: Store multiple private keys securely
-6. **📝 Logging**: Each instance generates separate logs
+2. **🏭 Contract Funding**: Volume bots need well-funded contracts
+3. **🌊 Gas Price Impact**: More instances = higher total gas consumption
+4. **⏰ RPC Rate Limits**: Monitor your RPC provider's rate limits
+5. **📊 Performance Monitoring**: Use PM2 for production monitoring
+6. **🔐 Security**: Store multiple private keys securely
+7. **📝 Logging**: Each instance generates separate logs
 
 ### 📊 Monitoring Multiple Instances
 
@@ -422,16 +566,16 @@ PK_MAIN=third_private_key pm2 start script.js --name Bot-3 -- create-and-swap "0
 pm2 monit
 
 # Check resource usage
-pm2 show TurboBot-Wallet1
+pm2 show VolumeBot-1
 
 # View error logs
-pm2 logs TurboBot-Wallet1 --err
+pm2 logs VolumeBot-1 --err
 
 # Restart failed instances
-pm2 restart TurboBot-Wallet1
+pm2 restart VolumeBot-1
 
 # Scale instances (if using cluster mode)
-pm2 scale TurboBot-Wallet1 +2
+pm2 scale VolumeBot-1 +2
 ```
 
 ### 🎯 Recommended Setup for Different Scales
@@ -488,6 +632,10 @@ pm2 scale TurboBot-Wallet1 +2
 - Run `node script.js create [count]` first to generate wallets
 - Check if `wallets.json` exists and contains valid data
 
+**❌ "Contract has no ETH or token balance"**
+- Fund the deployed contract with ETH and/or tokens before running volume bot
+- Check contract address after deployment and send funds there
+
 **❌ Gas estimation failures**
 - Increase gas price in `.env`: `GAS_PRICE_GWEI=2.0`
 - Reduce batch sizes to avoid network congestion
@@ -496,6 +644,11 @@ pm2 scale TurboBot-Wallet1 +2
 - Check RPC connection and gas prices
 - Verify funding wallet has sufficient balance
 - Script includes automatic error recovery and retry logic
+
+**🏭 Volume bot not working**
+- Ensure contract is deployed: `node script.js deploy [token_address]`
+- Verify contract has balance before starting volume generation
+- Check that the correct contract address is being used
 
 ### Maintenance Commands
 ```bash
@@ -510,6 +663,9 @@ node script.js check
 
 # Emergency ETH recovery
 node script.js recoverETH [private_key] [main_wallet_address]
+
+# Withdraw all funds from deployed contracts
+node script.js withdraw-token [token_address]
 ```
 
 ## ⚠️ Important Notes
@@ -521,6 +677,159 @@ node script.js recoverETH [private_key] [main_wallet_address]
 - **🧪 Testing**: Test with small amounts first before large-scale operations
 - **🔄 Automation**: Continuous automation commands run indefinitely - use Ctrl+C to stop
 - **💸 Recovery**: Always test ETH recovery with small amounts first
+- **🏭 Contract Funding**: VolumeSwap contracts need both ETH and tokens to function properly
+- **📊 Volume Generation**: Monitor contract balances and withdraw funds regularly
+- **🔄 Infinite Loops**: Volume bots run continuously - ensure proper monitoring and stopping procedures
+
+## 🏭 VolumeSwap Contract Technical Details
+
+### **Smart Contract Architecture**
+The VolumeSwap contract is designed for natural volume generation with the following features:
+
+**🤖 Intelligent Trading Logic:**
+- Automatically buys tokens when ETH balance is above threshold
+- Automatically sells tokens when token balance is available
+- Uses randomized percentages (10% + random%) for natural patterns
+- Configurable buy/sell percentages and maximum buy amounts
+
+**🔧 Owner Controls:**
+- `changeSellValue(uint256)` - Adjust sell percentage (default: 70%)
+- `changeBuyValue(uint256)` - Adjust buy percentage (default: 70%)
+- `setMaxBuy(uint256)` - Set maximum buy threshold (default: 0.0004 ETH)
+- `setOwner(address)` - Add additional owners
+- `withdraw()` - Withdraw all ETH and tokens
+
+**⚡ Gas Optimization:**
+- Efficient swap execution with minimal gas usage
+- Smart routing through Uniswap V2
+- Automatic slippage handling
+
+### **Deployment Specifications**
+- **Network**: Base Mainnet
+- **Router**: Uniswap V2 (0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24)
+- **WETH**: Base WETH (0x4200000000000000000000000000000000000006)
+- **Fee Structure**: Includes protocol fee handling
+- **Owner**: Deploying wallet (PK_MAIN)
+
+### **Volume Generation Process**
+1. **Contract Analysis**: Checks ETH and token balances
+2. **Decision Logic**: Determines buy vs sell based on available balances
+3. **Random Amount**: Calculates random percentage for natural trading
+4. **Swap Execution**: Executes trade through Uniswap V2
+5. **Event Emission**: Logs swap details for monitoring
+6. **Cycle Repeat**: Continues infinitely until stopped
+
+### **Balance Requirements**
+- **For Buying**: Contract needs ETH balance > maxBuy threshold
+- **For Selling**: Contract needs token balance > 0
+- **Optimal Setup**: Fund contract with both ETH and tokens for full functionality
+- **Monitoring**: Bot validates balances before starting and warns of limitations
+
+## 🚀 Advanced Usage Patterns
+
+### **Professional Volume Generation Setup**
+```bash
+# 1. Deploy multiple contracts for different tokens
+node script.js deploy 0xc849418f46A25D302f55d25c40a82C99404E5245  # KIKI
+node script.js deploy 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460  # TURBO
+node script.js deploy 0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB  # LORDY
+
+# 2. Fund each contract with appropriate amounts
+# Send ETH and tokens to each deployed contract address
+
+# 3. Run multiple volume bots simultaneously
+PK_MAIN=wallet1_key pm2 start script.js --name KIKI-Volume -- volumeV2 0 200 0xc849418f46A25D302f55d25c40a82C99404E5245
+PK_MAIN=wallet2_key pm2 start script.js --name TURBO-Volume -- volumeV2 0 200 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460
+PK_MAIN=wallet3_key pm2 start script.js --name LORDY-Volume -- volumeV2 0 200 0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB
+
+# 4. Monitor all instances
+pm2 monit
+
+# 5. Withdraw funds when needed
+node script.js withdraw-token 0xc849418f46A25D302f55d25c40a82C99404E5245
+node script.js withdraw-token 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460
+node script.js withdraw-token 0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB
+```
+
+### **Mixed Strategy Deployment**
+```bash
+# Combine volume generation with traditional methods
+pm2 start ecosystem.config.js
+
+# ecosystem.config.js content:
+module.exports = {
+  apps: [
+    {
+      name: 'KIKI-VolumeBot',
+      script: 'script.js',
+      args: 'volumeV2 0 300 0xc849418f46A25D302f55d25c40a82C99404E5245',
+      env: { PK_MAIN: 'wallet1_key' }
+    },
+    {
+      name: 'TURBO-VolumeBot', 
+      script: 'script.js',
+      args: 'volumeV2 300 600 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460',
+      env: { PK_MAIN: 'wallet2_key' }
+    },
+    {
+      name: 'Traditional-MultiSwap',
+      script: 'script.js', 
+      args: 'create-and-swap "0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB,0x7480527815ccAE421400Da01E052b120Cc4255E9"',
+      env: { PK_MAIN: 'wallet3_key' }
+    },
+    {
+      name: 'V3-ContinuousSwap',
+      script: 'script.js',
+      args: 'create-and-swapv3 0xf83cde146AC35E99dd61b6448f7aD9a4534133cc',
+      env: { PK_MAIN: 'wallet4_key' }
+    }
+  ]
+};
+```
+
+### **Scaling for High Volume**
+```bash
+# Large scale setup with 10+ instances across multiple tokens
+# Terminal 1 - KIKI Volume (4 instances)
+PK_MAIN=wallet1 pm2 start script.js --name KIKI-1 -- volumeV2 0 250 0xc849418f46A25D302f55d25c40a82C99404E5245
+PK_MAIN=wallet2 pm2 start script.js --name KIKI-2 -- volumeV2 250 500 0xc849418f46A25D302f55d25c40a82C99404E5245
+PK_MAIN=wallet3 pm2 start script.js --name KIKI-3 -- volumeV2 500 750 0xc849418f46A25D302f55d25c40a82C99404E5245
+PK_MAIN=wallet4 pm2 start script.js --name KIKI-4 -- volumeV2 750 1000 0xc849418f46A25D302f55d25c40a82C99404E5245
+
+# Terminal 2 - TURBO Volume (4 instances)  
+PK_MAIN=wallet5 pm2 start script.js --name TURBO-1 -- volumeV2 0 250 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460
+PK_MAIN=wallet6 pm2 start script.js --name TURBO-2 -- volumeV2 250 500 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460
+PK_MAIN=wallet7 pm2 start script.js --name TURBO-3 -- volumeV2 500 750 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460
+PK_MAIN=wallet8 pm2 start script.js --name TURBO-4 -- volumeV2 750 1000 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460
+
+# Terminal 3 - Traditional methods (2 instances)
+PK_MAIN=wallet9 pm2 start script.js --name MULTI-1 -- create-and-swap "0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB,0x7480527815ccAE421400Da01E052b120Cc4255E9"
+PK_MAIN=wallet10 pm2 start script.js --name V3-1 -- create-and-swapv3 0xf83cde146AC35E99dd61b6448f7aD9a4534133cc
+
+# Monitor all 10 instances
+pm2 status
+```
+
+## 📊 Performance Optimization
+
+### **Volume Bot Optimization Tips**
+1. **🏭 Contract Funding**: Keep contracts well-funded for uninterrupted operation
+2. **⚖️ Balance Ratio**: Maintain 60-70% ETH, 30-40% tokens for optimal buy/sell cycles
+3. **⏰ Timing**: Run during high gas periods for more realistic volume patterns
+4. **🔄 Wallet Range**: Use 100-500 wallets per instance for best performance
+5. **💰 Gas Management**: Monitor gas prices and adjust if needed
+
+### **Traditional Method Optimization**
+1. **🔄 Funding Amounts**: Use 0.00001-0.00005 ETH per cycle for efficiency
+2. **🎯 Token Selection**: Mix popular and lesser-known tokens
+3. **⏱️ Timing Delays**: 150ms between transactions, 3s between cycles
+4. **💸 Recovery Rate**: Aim for 95%+ ETH recovery rate
+
+### **Multi-Instance Coordination**
+1. **📊 Load Distribution**: Spread wallet ranges evenly across instances
+2. **🌊 Gas Competition**: Stagger start times to avoid gas price spikes
+3. **🔄 Rotation**: Rotate between different tokens and strategies
+4. **📈 Monitoring**: Use PM2 monitoring for real-time performance tracking
 
 ## 🤝 Contributing & Support
 
@@ -531,7 +840,16 @@ This is an **open source project** and we welcome contributions!
 2. Create a feature branch
 3. Make your changes
 4. Ensure all functions maintain existing error handling and logging patterns
-5. Submit a pull request
+5. Test new features with small amounts first
+6. Submit a pull request
+
+### Recent Updates
+- **🏭 VolumeSwap Contract System**: Deploy and manage volume generation contracts
+- **📊 Infinite Volume Bot**: Continuous volume generation with balance validation  
+- **💸 Comprehensive Withdrawal**: Full fund recovery from deployed contracts
+- **🔍 Smart Balance Validation**: Pre-flight checks for contract functionality
+- **📈 Enhanced Statistics**: Real-time success rates and cycle tracking
+- **🛡️ Improved Error Handling**: Better recovery and retry mechanisms
 
 ### Support the Project
 If you find this project useful, consider supporting development:
@@ -542,9 +860,34 @@ Your donations help maintain and improve this open source tool for the community
 
 ### Getting Help
 - Check the troubleshooting section above
-- Review the command examples
+- Review the command examples and new volume generation features
 - Ensure your `.env` file is properly configured
 - Test with small amounts before scaling up
+- For volume generation, ensure contracts are properly funded
+
+## 🔮 Roadmap & Future Features
+
+### **Planned Features**
+- **🤖 AI-Powered Trading**: Machine learning for more natural volume patterns
+- **📊 Advanced Analytics**: Detailed performance metrics and reporting
+- **🔄 Multi-Chain Support**: Expansion to other EVM-compatible chains
+- **🎯 Target-Based Volume**: Set specific volume targets and timeframes
+- **📱 Web Dashboard**: Real-time monitoring and control interface
+- **🔔 Notifications**: Telegram/Discord alerts for important events
+
+### **Smart Contract Enhancements**
+- **🎲 Advanced Randomization**: More sophisticated random trading patterns
+- **⏰ Time-Based Logic**: Trading schedules and time-based behaviors
+- **📈 Volume Targets**: Automatic stopping at volume milestones
+- **🔄 Multi-Token Support**: Single contract handling multiple tokens
+- **💰 Profit Tracking**: Built-in P&L tracking and optimization
+
+### **Infrastructure Improvements**
+- **☁️ Cloud Deployment**: One-click cloud instance deployment
+- **🔄 Auto-Scaling**: Dynamic instance scaling based on performance
+- **🛡️ Enhanced Security**: Hardware wallet support and key management
+- **📊 Database Integration**: Persistent storage for analytics and history
+- **🌐 API Interface**: RESTful API for programmatic control
 
 ## 📄 License
 
@@ -555,9 +898,10 @@ Your donations help maintain and improve this open source tool for the community
 - **GitHub Repository**: [TurboBot](https://github.com/tiagoterron/TurboBot)
 - **Base Network**: [Base Chain](https://base.org/)
 - **Uniswap**: [Uniswap Protocol](https://uniswap.org/)
+- **VolumeSwap Contracts**: [Base Explorer](https://basescan.org/)
 
 ---
 
-**⚡ Ready to automate? Start with `./install.sh setup` and scale your DeFi operations!**
+**⚡ Ready to generate volume? Start with `./install.sh setup` and deploy your first VolumeSwap contract!**
 
-*Remember: This is open source software provided as-is. Always test with small amounts and use at your own risk.*
+*Remember: This is open source software provided as-is. Always test with small amounts, properly fund your contracts, and use at your own risk. The new volume generation features require careful balance management for optimal performance.*

@@ -22,6 +22,7 @@ const contracts = {
     uniswapRouter: "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24",
     airdropContract: "0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3",
     multicallSwap: "0x0D99F3072fDbEDFFFf920f166F3B5d7e2bE32Ba0",
+    deployerContract: "0x3aE2AFE8fe3862144eFa1DA6e11C3Fd40c361688",
     v3SwapContract: "0xe9d7E6669C39350DD6664fd6fB66fCE4D871D374"
 };
 
@@ -37,6 +38,50 @@ const multicallAbi = [
     "function executeMultiSwap(tuple(address tokenAddress, uint256 ethAmount, address recipient, address router, uint256 minAmountOut)[] swapDetails) external payable",
     "function swapPredefinedTokens(uint256 ethAmountToken1, uint256 ethAmountToken2, uint256 minAmountOutToken1, uint256 minAmountOutToken2, address recipient, address router) external payable",
     "function swapEqualAmounts(uint256 ethAmountEach, uint256 minAmountOutToken1, uint256 minAmountOutToken2, address recipient, address router) external payable"
+];
+
+const turboDeployerAbi = [
+    "function deploy(address tokenAddress, address owner) external payable returns (address)",
+    "function deployedContracts(uint256) external view returns (address)",
+    "function tokenToContracts(address, uint256) external view returns (address)",
+    "function ownerTokenToContract(address, address) external view returns (address)",
+    "function ownerToContracts(address, uint256) external view returns (address)",
+    "function getAllDeployedContracts() external view returns (address[])",
+    "function getDeployedContractsCount() external view returns (uint256)",
+    "function getDeployedContractByIndex(uint256 index) external view returns (address)",
+    "function getContractsByToken(address tokenAddress) external view returns (address[])",
+    "function getContractCountByToken(address tokenAddress) external view returns (uint256)",
+    "function getContractsByOwner(address owner) external view returns (address[])",
+    "function getContractCountByOwner(address owner) external view returns (uint256)",
+    "function getContractByOwnerAndToken(address owner, address tokenAddress) external view returns (address)",
+    "function hasDeployed(address owner, address tokenAddress) external view returns (bool)",
+    "event Deployed(address indexed token, address indexed deployedContract, address indexed owner)"
+];
+
+const volumeSwapAbi = [
+    // Main Functions
+    "function executeSwap() external payable",
+    "function withdraw() external",
+    
+    // Owner Functions
+    "function changeSellValue(uint256 value) external",
+    "function changeBuyValue(uint256 value) external", 
+    "function setMaxBuy(uint256 value) external",
+    "function setOwner(address newOwner) external",
+    
+    // View Functions
+    "function WETH() external view returns (address)",
+    "function owner() external view returns (address)",
+    "function tokenAddress() external view returns (address)",
+    "function percentualSell() external view returns (uint256)",
+    "function routerUniV2() external view returns (address)",
+    "function percentualBuy() external view returns (uint256)",
+    "function maxBuy() external view returns (uint256)",
+    "function approvedRouters(address) external view returns (bool)",
+    
+    // Events
+    "event SwapPrepared(address indexed recipient, address indexed tokenAddress, uint256 amountETH)",
+    "event SwapExecuted(address indexed recipient, address indexed tokenAddress, uint256 amountETH)",
 ];
 
 // Default token addresses
@@ -167,6 +212,342 @@ async function createWallets(count) {
     return allWallets;
 }
 
+const LockyFiDeployerAbi = [
+    "function deploy(address tokenAddress) external payable returns (address)",
+    "function deployedContracts(uint256) external view returns (address)",
+    "function tokenToContracts(address, uint256) external view returns (address)",
+    "function ownerTokenToContract(address, address) external view returns (address)",
+    "function ownerToContracts(address, uint256) external view returns (address)",
+    "function getAllDeployedContracts() external view returns (address[])",
+    "function getDeployedContractsCount() external view returns (uint256)",
+    "function getDeployedContractByIndex(uint256 index) external view returns (address)",
+    "function getContractsByToken(address tokenAddress) external view returns (address[])",
+    "function getContractCountByToken(address tokenAddress) external view returns (uint256)",
+    "function getContractsByOwner(address owner) external view returns (address[])",
+    "function getContractCountByOwner(address owner) external view returns (uint256)",
+    "function getContractByOwnerAndToken(address owner, address tokenAddress) external view returns (address)",
+    "function hasDeployed(address owner, address tokenAddress) external view returns (bool)",
+    "event Deployed(address indexed token, address indexed deployedContract, address indexed owner)"
+];
+
+async function deployContract(tokenAddress) {
+    try {
+        if (!config.fundingPrivateKey) {
+            throw new Error('PK_MAIN not configured in .env file');
+        }
+
+        // Use main wallet (PK_MAIN) for deployment
+        const mainSigner = new ethers.Wallet(config.fundingPrivateKey, provider);
+        
+        console.log(`Deploying from main wallet: ${mainSigner.address}`);
+        console.log(`Token address: ${tokenAddress}`);
+        console.log(`Deployer contract: ${contracts.deployerContract}`);
+        
+        // Check wallet balance first
+        const balance = await provider.getBalance(mainSigner.address);
+        const minBalance = ethers.utils.parseUnits("0.0001", 18); // 0.001 ETH minimum
+        
+        if (balance.lt(minBalance)) {
+            throw new Error(`Insufficient balance for ${mainSigner.address}: ${ethers.utils.formatUnits(balance, 18)} ETH`);
+        }
+        
+        console.log(`Main wallet balance: ${ethers.utils.formatUnits(balance, 18)} ETH`);
+        
+        // Create contract instance
+        const deployerContract = new ethers.Contract(contracts.deployerContract, turboDeployerAbi, mainSigner);
+      
+        // Check if already deployed by this owner for this token
+        try {
+            const alreadyDeployed = await deployerContract.hasDeployed(mainSigner.address, tokenAddress);
+            if (alreadyDeployed) {
+                const existingContract = await deployerContract.getContractByOwnerAndToken(mainSigner.address, tokenAddress);
+                console.log(`⚠️  Contract already deployed for this token: ${existingContract}`);
+                return { 
+                    success: false, 
+                    reason: 'already_deployed',
+                    existingContract: existingContract
+                };
+            }
+        } catch (checkError) {
+            console.log(`Could not check existing deployment: ${checkError.message}`);
+        }
+        
+        // Build raw transaction data
+        const tx = {
+            to: deployerContract.address,
+            data: deployerContract.interface.encodeFunctionData("deploy", [tokenAddress, mainSigner.address]),
+            value: 0 // No ETH value needed for deployment
+        };
+        
+        // Get nonce using "latest" instead of "pending"
+        const nonce = await mainSigner.getTransactionCount("latest");
+        
+        // Get base gas price and apply multiplier
+        const baseGasPrice = await provider.getGasPrice();
+        console.log(`Base gas price: ${ethers.utils.formatUnits(baseGasPrice, 9)} Gwei`);
+        
+        // Force minimum gas price for Base network
+        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
+        let gasPrice = baseGasPrice.lt(minGasPrice) ? 
+            minGasPrice.mul(5) : baseGasPrice.mul(120).div(100); // 5x minimum or 20% boost
+        
+        console.log(`Using gas price: ${ethers.utils.formatUnits(gasPrice, 9)} Gwei`);
+         
+        // Estimate gas limit
+        let gasLimit;
+        try {
+            gasLimit = await provider.estimateGas({
+                ...tx,
+                from: mainSigner.address
+            });
+            
+            // Add 50% buffer to gas limit
+            gasLimit = gasLimit.mul(150).div(100);
+        } catch (gasError) {
+            console.error(`Gas estimation failed:`, gasError.message);
+            // Use fallback gas limit for contract deployment
+            gasLimit = ethers.BigNumber.from("500000");
+        }
+        
+        // Check if we have enough balance for gas
+        const totalGasCost = gasPrice.mul(gasLimit);
+        if (balance.lt(totalGasCost)) {
+            throw new Error(`Insufficient balance for gas. Need ${ethers.utils.formatUnits(totalGasCost, 18)} ETH`);
+        }
+        
+        console.log(`Gas limit: ${gasLimit.toString()}, Total gas cost: ${ethers.utils.formatUnits(totalGasCost, 18)} ETH`);
+       
+        // Send transaction with raw transaction method
+        const transaction = await mainSigner.sendTransaction({
+            ...tx,
+            gasLimit,
+            gasPrice,
+            nonce,
+            type: 0 // Force legacy transaction type
+        });
+        
+        console.log(`Deploy transaction sent: ${transaction.hash}`);
+        console.log(`⏳ Waiting for confirmation...`);
+        
+        // Wait for confirmation with timeout
+        let receipt;
+        try {
+            // Wait up to 2 minutes for confirmation
+            receipt = await Promise.race([
+                transaction.wait(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Transaction timeout")), 120000)
+                )
+            ]);
+        } catch (waitError) {
+            console.error(`Transaction wait failed: ${waitError.message}`);
+            
+            // Try to get receipt manually after waiting
+            await sleep(30000);
+            try {
+                receipt = await provider.getTransactionReceipt(transaction.hash);
+                if (!receipt) {
+                    throw new Error("Transaction not found");
+                }
+            } catch (receiptError) {
+                console.error(`Failed to get receipt: ${receiptError.message}`);
+                throw new Error(`Receipt error: ${receiptError.message}`);
+            }
+        }
+        
+        if (receipt && receipt.status === 1) {
+            console.log(`✅ Deploy SUCCESS: ${receipt.transactionHash}`);
+            console.log(`⛽ Gas used: ${receipt.gasUsed.toString()}`);
+            
+            // Parse the deployment event to get the deployed contract address
+            let deployedContractAddress = null;
+            try {
+                const deployedEvent = receipt.logs.find(log => {
+                    try {
+                        const parsed = deployerContract.interface.parseLog(log);
+                        return parsed.name === 'Deployed';
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                if (deployedEvent) {
+                    const parsed = deployerContract.interface.parseLog(deployedEvent);
+                    deployedContractAddress = parsed.args.deployedContract;
+                    console.log(`📄 Deployed contract address: ${deployedContractAddress}`);
+                    console.log(`🎯 Token: ${parsed.args.token}`);
+                    console.log(`👤 Owner: ${parsed.args.owner}`);
+
+                    console.log(`\n🚨 IMPORTANT NEXT STEPS:`);
+                    console.log(`📤 You must now send funds (ETH/funds) to the contract address:`);
+                    console.log(`   Contract Address: ${deployedContractAddress}`);
+                    console.log(`   Token Address: ${tokenAddress}`);
+                    console.log(`\n💡 Instructions:`);
+                    console.log(`   1. Transfer your ${tokenAddress} tokens to ${deployedContractAddress}`);
+                    console.log(`   2. The contract needs token balance to execute swaps properly and generate volume`);
+                    console.log(`   3. Without tokens in the contract, swap functions will fail`);
+                    console.log(`\n⚠️  Make sure to transfer tokens before running swap operations!`);
+                    console.log(`────────────────────────────────────────────────────────────────\n`);
+                }
+            } catch (eventError) {
+                console.log(`Could not parse deployment event: ${eventError.message}`);
+            }
+            
+            return { 
+                success: true, 
+                txHash: receipt.transactionHash,
+                deployedContract: deployedContractAddress,
+                tokenAddress: tokenAddress,
+                owner: mainSigner.address,
+                gasUsed: receipt.gasUsed.toString(),
+                gasCost: ethers.utils.formatUnits(receipt.gasUsed.mul(gasPrice), 18)
+            };
+        } else {
+            throw new Error(`Transaction failed: ${receipt?.transactionHash || transaction.hash}`);
+        }
+        
+    } catch (err) {
+        console.error(`Error deploying contract:`, err.message);
+        
+        // Handle specific error types
+        if (err.code === 'INSUFFICIENT_FUNDS' || err.message.includes('insufficient funds')) {
+            throw new Error(`Insufficient funds in main wallet`);
+        } else if (err.code === 'NONCE_EXPIRED' || err.code === 'NONCE_TOO_LOW') {
+            throw new Error(`Nonce issue with main wallet`);
+        } else if (err.code === 'REPLACEMENT_UNDERPRICED') {
+            throw new Error(`Gas price too low`);
+        } else if (err.message.includes('gas')) {
+            throw new Error(`Gas related error: ${err.message}`);
+        } else if (err.message.includes('already deployed')) {
+            throw new Error(`Contract already deployed for this token`);
+        }
+        
+        throw err;
+    }
+}
+
+
+
+async function getContractAddress(tokenAddress, ownerAddress, deployerContractAddress = contracts.deployerContract) {
+    try {
+        console.log(`Retrieving contract address for:`);
+        console.log(`Token: ${tokenAddress}`);
+        console.log(`Owner: ${ownerAddress}`);
+        console.log(`Deployer Contract: ${deployerContractAddress}`);
+        
+        // Create contract instance (read-only, no signer needed)
+        const deployerContract = new ethers.Contract(deployerContractAddress, turboDeployerAbi, provider);
+        
+        // Call the contract to get the deployed contract address
+        const contractAddress = await deployerContract.getContractByOwnerAndToken(ownerAddress, tokenAddress);
+        
+        // Check if a contract was found (address(0) means no contract deployed)
+        if (contractAddress === ethers.constants.AddressZero) {
+            console.log(`❌ No contract found for this token and owner combination`);
+            return {
+                success: false,
+                reason: 'no_contract_found',
+                contractAddress: null
+            };
+        }
+        
+        console.log(`✅ Contract found: ${contractAddress}`);
+        
+        // Optional: Verify the contract exists by checking if it has code
+        try {
+            const code = await provider.getCode(contractAddress);
+            if (code === '0x') {
+                console.log(`⚠️  Warning: Contract address found but no code deployed at address`);
+                return {
+                    success: false,
+                    reason: 'no_code_at_address',
+                    contractAddress: contractAddress
+                };
+            }
+            console.log(`✅ Contract verified - code exists at address`);
+        } catch (codeError) {
+            console.log(`Could not verify contract code: ${codeError.message}`);
+        }
+        
+        return {
+            success: true,
+            contractAddress: contractAddress,
+            tokenAddress: tokenAddress,
+            ownerAddress: ownerAddress
+        };
+        
+    } catch (err) {
+        console.error(`Error retrieving contract address: ${err.message}`);
+        
+        // Handle specific error types
+        if (err.code === 'CALL_EXCEPTION') {
+            return {
+                success: false,
+                reason: 'contract_call_failed',
+                error: err.message,
+                contractAddress: null
+            };
+        } else if (err.code === 'NETWORK_ERROR') {
+            return {
+                success: false,
+                reason: 'network_error',
+                error: err.message,
+                contractAddress: null
+            };
+        }
+        
+        return {
+            success: false,
+            reason: 'unknown_error',
+            error: err.message,
+            contractAddress: null
+        };
+    }
+}
+
+// Helper function to get contract address using main wallet as owner
+async function getContractAddressForMainWallet(tokenAddress) {
+    if (!config.fundingPrivateKey) {
+        throw new Error('PK_MAIN not configured in .env file');
+    }
+    
+    const mainWallet = new ethers.Wallet(config.fundingPrivateKey);
+    return await getContractAddress(tokenAddress, mainWallet.address);
+}
+
+// getContractAddressForMainWallet("0xc849418f46A25D302f55d25c40a82C99404E5245")
+
+// Helper function to check if a contract is deployed for a token by the main wallet
+async function hasContractDeployed(tokenAddress, deployerContractAddress) {
+    try {
+        if (!config.fundingPrivateKey) {
+            throw new Error('PK_MAIN not configured in .env file');
+        }
+        
+        const mainWallet = new ethers.Wallet(config.fundingPrivateKey);
+        const deployerContract = new ethers.Contract(deployerContractAddress, LockyFiDeployerAbi, provider);
+        
+        const hasDeployed = await deployerContract.hasDeployed(mainWallet.address, tokenAddress);
+        
+        console.log(`Contract deployed check - Token: ${tokenAddress}, Has deployed: ${hasDeployed}`);
+        
+        return {
+            success: true,
+            hasDeployed: hasDeployed,
+            tokenAddress: tokenAddress,
+            ownerAddress: mainWallet.address
+        };
+        
+    } catch (err) {
+        console.error(`Error checking if contract is deployed: ${err.message}`);
+        return {
+            success: false,
+            error: err.message,
+            hasDeployed: false
+        };
+    }
+}
+
 async function createWalletsToTarget(targetCount) {
     const existingWallets = loadWallets();
     const currentCount = existingWallets.length;
@@ -254,8 +635,7 @@ async function sendAirdropWallets(start, end, wallets, totalEthAmount = null) {
         }
         
         // Setup airdrop contract
-        const abi = ["function sendAirdropETH(address[] calldata recipients) external payable"];
-        const airdrop = new ethers.Contract("0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3", abi, signer);
+        const airdrop = new ethers.Contract("0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3", airdropAbi, signer);
         
         // Prepare transaction data
         const tx = {
@@ -602,8 +982,7 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
     
     // Setup contract once for all chunks
     const signer = new ethers.Wallet(config.fundingPrivateKey, provider);
-    const abi = ["function sendAirdropETH(address[] calldata recipients) external payable"];
-    const airdrop = new ethers.Contract("0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3", abi, signer);
+    const airdrop = new ethers.Contract("0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3", airdropAbi, signer);
     
     let totalSuccessful = 0;
     let totalFailed = 0;
@@ -1464,28 +1843,475 @@ async function sendETHBack(privateKey, receiver, minValue = ethers.utils.parseUn
     }
 }
 
+async function withdrawFromContract(contractAddress, tokenAddress = null) {
+    try {
+        if (!config.fundingPrivateKey) {
+            throw new Error('PK_MAIN not configured in .env file');
+        }
+
+        // Use main wallet (PK_MAIN) for withdrawal (only owner can withdraw)
+        const mainSigner = new ethers.Wallet(config.fundingPrivateKey, provider);
+        
+        console.log(`🏦 Withdrawing from contract: ${contractAddress}`);
+        console.log(`👤 Main wallet: ${mainSigner.address}`);
+        
+        // Check main wallet balance for gas
+        const mainBalance = await provider.getBalance(mainSigner.address);
+        const minBalance = ethers.utils.parseUnits("0.0001", 18); // 0.001 ETH minimum for gas
+        
+        if (mainBalance.lt(minBalance)) {
+            throw new Error(`Insufficient balance for gas in main wallet: ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
+        }
+        
+        console.log(`💰 Main wallet balance: ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
+        
+        // Create contract instance
+        const volumeSwapContract = new ethers.Contract(contractAddress, volumeSwapAbi, mainSigner);
+        
+        // Check contract balances before withdrawal
+        console.log(`\n🔍 Checking contract balances before withdrawal...`);
+        
+        const contractETHBalance = await provider.getBalance(contractAddress);
+        console.log(`💰 Contract ETH balance: ${ethers.utils.formatUnits(contractETHBalance, 18)} ETH`);
+        
+        // Get token address from contract if not provided
+        let targetTokenAddress = tokenAddress;
+        if (!targetTokenAddress) {
+            try {
+                targetTokenAddress = await volumeSwapContract.tokenAddress();
+                console.log(`🎯 Contract token address: ${targetTokenAddress}`);
+            } catch (tokenError) {
+                console.log(`⚠️  Could not get token address from contract: ${tokenError.message}`);
+            }
+        }
+        
+        // Check token balance if we have token address
+        let contractTokenBalance = ethers.BigNumber.from("0");
+        let tokenSymbol = "TOKEN";
+        let tokenDecimals = 18;
+        
+        if (targetTokenAddress && targetTokenAddress !== ethers.constants.AddressZero) {
+            try {
+                const tokenContract = new ethers.Contract(targetTokenAddress, [
+                    "function balanceOf(address) external view returns (uint256)",
+                    "function symbol() external view returns (string)",
+                    "function decimals() external view returns (uint8)"
+                ], provider);
+                
+                contractTokenBalance = await tokenContract.balanceOf(contractAddress);
+                tokenSymbol = await tokenContract.symbol();
+                tokenDecimals = await tokenContract.decimals();
+                
+                console.log(`🪙 Contract ${tokenSymbol} balance: ${ethers.utils.formatUnits(contractTokenBalance, tokenDecimals)} ${tokenSymbol}`);
+            } catch (tokenError) {
+                console.log(`⚠️  Could not check token balance: ${tokenError.message}`);
+            }
+        }
+        
+        // Check if there's anything to withdraw
+        if (contractETHBalance.eq(0) && contractTokenBalance.eq(0)) {
+            console.log(`ℹ️  Contract has no funds to withdraw`);
+            return {
+                success: true,
+                reason: 'no_funds',
+                ethWithdrawn: "0",
+                tokensWithdrawn: "0"
+            };
+        }
+        
+        console.log(`\n💸 Initiating withdrawal...`);
+        console.log(`📤 Will withdraw: ${ethers.utils.formatUnits(contractETHBalance, 18)} ETH`);
+        if (contractTokenBalance.gt(0)) {
+            console.log(`📤 Will withdraw: ${ethers.utils.formatUnits(contractTokenBalance, tokenDecimals)} ${tokenSymbol}`);
+        }
+        
+        // Build raw transaction data for withdraw
+        const tx = {
+            to: volumeSwapContract.address,
+            data: volumeSwapContract.interface.encodeFunctionData("withdraw", []),
+            value: 0
+        };
+        
+        // Get nonce
+        const nonce = await mainSigner.getTransactionCount("latest");
+        
+        // Get gas price
+        const baseGasPrice = await provider.getGasPrice();
+        console.log(`⛽ Base gas price: ${ethers.utils.formatUnits(baseGasPrice, 9)} Gwei`);
+        
+        // Use moderate gas price boost for withdrawal
+        const gasPrice = baseGasPrice.mul(120).div(100); // 20% boost
+        console.log(`⛽ Using gas price: ${ethers.utils.formatUnits(gasPrice, 9)} Gwei`);
+        
+        // Estimate gas limit
+        let gasLimit;
+        try {
+            gasLimit = await provider.estimateGas({
+                ...tx,
+                from: mainSigner.address
+            });
+            
+            // Add 30% buffer to gas limit
+            gasLimit = gasLimit.mul(130).div(100);
+        } catch (gasError) {
+            console.error(`Gas estimation failed:`, gasError.message);
+            // Use fallback gas limit for withdrawal
+            gasLimit = ethers.BigNumber.from("150000");
+        }
+        
+        // Check if we have enough balance for gas
+        const totalGasCost = gasPrice.mul(gasLimit);
+        if (mainBalance.lt(totalGasCost)) {
+            throw new Error(`Insufficient balance for gas. Need ${ethers.utils.formatUnits(totalGasCost, 18)} ETH`);
+        }
+        
+        console.log(`⛽ Gas limit: ${gasLimit.toString()}`);
+        console.log(`⛽ Total gas cost: ${ethers.utils.formatUnits(totalGasCost, 18)} ETH`);
+        
+        // Record balances before withdrawal for comparison
+        const mainBalanceBefore = await provider.getBalance(mainSigner.address);
+        
+        // Send withdrawal transaction
+        const transaction = await mainSigner.sendTransaction({
+            ...tx,
+            gasLimit,
+            gasPrice,
+            nonce,
+            type: 0 // Force legacy transaction type
+        });
+        
+        console.log(`📤 Withdrawal transaction sent: ${transaction.hash}`);
+        console.log(`⏳ Waiting for confirmation...`);
+        
+        // Wait for confirmation
+        let receipt;
+        try {
+            receipt = await Promise.race([
+                transaction.wait(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Transaction timeout")), 120000)
+                )
+            ]);
+        } catch (waitError) {
+            console.error(`Transaction wait failed: ${waitError.message}`);
+            
+            await sleep(30000);
+            try {
+                receipt = await provider.getTransactionReceipt(transaction.hash);
+                if (!receipt) {
+                    throw new Error("Transaction not found");
+                }
+            } catch (receiptError) {
+                throw new Error(`Receipt error: ${receiptError.message}`);
+            }
+        }
+        
+        if (receipt && receipt.status === 1) {
+            console.log(`✅ Withdrawal SUCCESS: ${receipt.transactionHash}`);
+            console.log(`⛽ Gas used: ${receipt.gasUsed.toString()}`);
+            
+            // Check balances after withdrawal
+            console.log(`\n📊 Post-withdrawal status:`);
+            
+            const mainBalanceAfter = await provider.getBalance(mainSigner.address);
+            const contractETHBalanceAfter = await provider.getBalance(contractAddress);
+            
+            const ethReceived = contractETHBalance; // All ETH should be withdrawn
+            const gasUsed = receipt.gasUsed.mul(gasPrice);
+            const netETHGain = ethReceived.sub(gasUsed);
+            
+            console.log(`💰 Main wallet balance: ${ethers.utils.formatUnits(mainBalanceAfter, 18)} ETH`);
+            console.log(`💰 Contract ETH balance: ${ethers.utils.formatUnits(contractETHBalanceAfter, 18)} ETH`);
+            console.log(`📈 ETH withdrawn: ${ethers.utils.formatUnits(ethReceived, 18)} ETH`);
+            console.log(`⛽ Gas cost: ${ethers.utils.formatUnits(gasUsed, 18)} ETH`);
+            console.log(`📊 Net ETH gain: ${ethers.utils.formatUnits(netETHGain, 18)} ETH`);
+            
+            // Check token balance after withdrawal
+            let tokensWithdrawn = "0";
+            if (targetTokenAddress && targetTokenAddress !== ethers.constants.AddressZero) {
+                try {
+                    const tokenContract = new ethers.Contract(targetTokenAddress, [
+                        "function balanceOf(address) external view returns (uint256)"
+                    ], provider);
+                    
+                    const contractTokenBalanceAfter = await tokenContract.balanceOf(contractAddress);
+                    tokensWithdrawn = ethers.utils.formatUnits(contractTokenBalance.sub(contractTokenBalanceAfter), tokenDecimals);
+                    
+                    console.log(`🪙 Contract ${tokenSymbol} balance: ${ethers.utils.formatUnits(contractTokenBalanceAfter, tokenDecimals)} ${tokenSymbol}`);
+                    console.log(`📈 ${tokenSymbol} withdrawn: ${tokensWithdrawn} ${tokenSymbol}`);
+                } catch (tokenCheckError) {
+                    console.log(`⚠️  Could not verify token withdrawal: ${tokenCheckError.message}`);
+                }
+            }
+            
+            console.log(`\n✅ Withdrawal completed successfully!`);
+            
+            return {
+                success: true,
+                txHash: receipt.transactionHash,
+                ethWithdrawn: ethers.utils.formatUnits(ethReceived, 18),
+                tokensWithdrawn: tokensWithdrawn,
+                tokenSymbol: tokenSymbol,
+                gasUsed: receipt.gasUsed.toString(),
+                gasCost: ethers.utils.formatUnits(gasUsed, 18),
+                netETHGain: ethers.utils.formatUnits(netETHGain, 18)
+            };
+        } else {
+            throw new Error(`Withdrawal transaction failed: ${receipt?.transactionHash || transaction.hash}`);
+        }
+        
+    } catch (err) {
+        console.error(`❌ Withdrawal error: ${err.message}`);
+        
+        // Handle specific error types
+        if (err.code === 'INSUFFICIENT_FUNDS' || err.message.includes('insufficient funds')) {
+            throw new Error(`Insufficient funds in main wallet for withdrawal`);
+        } else if (err.message.includes('Ownable: caller is not the owner')) {
+            throw new Error(`Only the contract owner can withdraw funds. Make sure PK_MAIN matches the contract owner.`);
+        } else if (err.code === 'CALL_EXCEPTION') {
+            throw new Error(`Contract call failed - contract may not exist or function may have reverted`);
+        }
+        
+        throw err;
+    }
+}
+
+// Helper function to withdraw from contract using token address lookup
+async function withdrawByToken(tokenAddress) {
+    try {
+        if (!config.fundingPrivateKey) {
+            throw new Error('PK_MAIN not configured in .env file');
+        }
+        
+        const mainWallet = new ethers.Wallet(config.fundingPrivateKey);
+        
+        // Get contract address for the token
+        const contractResult = await getContractAddress(tokenAddress, mainWallet.address, contracts.deployerContract);
+        
+        if (!contractResult.success) {
+            throw new Error(`No contract found for token ${tokenAddress}. Deploy a contract first.`);
+        }
+        
+        console.log(`🔍 Found contract for token ${tokenAddress}: ${contractResult.contractAddress}`);
+        
+        return await withdrawFromContract(contractResult.contractAddress, tokenAddress);
+        
+    } catch (err) {
+        console.error(`❌ Withdrawal by token error: ${err.message}`);
+        throw err;
+    }
+}
+
+
+async function volumeBotV2(index = 0, wallets, contractAddress) {
+    try {
+        if (index >= wallets.length) {
+            console.log(`Index ${index} exceeds wallet array length`);
+            return { success: false, reason: 'index_out_of_bounds' };
+        }
+        
+        const signer = new ethers.Wallet(wallets[index][1], provider);
+        console.log(`Wallet ${index}: ${signer.address}`);
+
+        // Check wallet balance first
+        const balance = await provider.getBalance(signer.address);
+        const minBalance = ethers.utils.parseUnits("0.000001", 18); // 0.000001 ETH minimum
+        
+        if (balance.lt(minBalance)) {
+            console.log(`Insufficient balance: ${ethers.utils.formatUnits(balance, 18)} ETH`);
+            return { success: false, reason: 'insufficient_funds' };
+        }
+        
+        console.log(`Wallet balance: ${ethers.utils.formatUnits(balance, 18)} ETH`);
+        
+        // Create contract instance with the fixed ABI
+        const contract = new ethers.Contract(contractAddress, volumeSwapAbi, signer);
+        
+        // Build raw transaction data
+        const tx = {
+            to: contract.address,
+            data: contract.interface.encodeFunctionData("executeSwap", []),
+            value: 0 // No ETH value sent directly, contract handles its own balance
+        };
+
+        // Get nonce using "latest" instead of "pending"
+        const nonce = await signer.getTransactionCount("latest");
+        
+        // Get base gas price and apply multiplier
+        const baseGasPrice = await provider.getGasPrice();
+        console.log(`Base gas price: ${ethers.utils.formatUnits(baseGasPrice, 9)} Gwei`);
+        
+        // Force minimum gas price for Base network
+        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
+        let gasPrice = baseGasPrice.lt(minGasPrice) ? 
+            minGasPrice.mul(5) : baseGasPrice.mul(120).div(100); // 5x minimum or 20% boost
+        
+        console.log(`Using gas price: ${ethers.utils.formatUnits(gasPrice, 9)} Gwei`);
+        
+        // Estimate gas limit
+        let gasLimit;
+        try {
+            gasLimit = await provider.estimateGas({
+                ...tx,
+                from: signer.address
+            });
+            
+            // Add 50% buffer to gas limit
+            gasLimit = gasLimit.mul(150).div(100);
+        } catch (gasError) {
+            console.error(`Gas estimation failed:`, gasError.message);
+            // Use fallback gas limit for VolumeSwap executeSwap
+            gasLimit = ethers.BigNumber.from("300000");
+        }
+        
+        // Check if we have enough balance for gas
+        const totalGasCost = gasPrice.mul(gasLimit);
+        if (balance.lt(totalGasCost)) {
+            console.log(`Insufficient balance for gas. Need ${ethers.utils.formatUnits(totalGasCost, 18)} ETH`);
+            return { success: false, reason: 'insufficient_gas' };
+        }
+        
+        console.log(`Gas limit: ${gasLimit.toString()}, Total gas cost: ${ethers.utils.formatUnits(totalGasCost, 18)} ETH`);
+        console.log(`Contract address: ${contractAddress}`);
+        
+        // Send transaction with legacy type
+        const transaction = await signer.sendTransaction({
+            ...tx,
+            gasLimit,
+            gasPrice,
+            nonce,
+            type: 0 // Force legacy transaction type
+        });
+        
+        console.log(`Transaction sent: ${transaction.hash}`);
+        
+        // Wait for confirmation with timeout
+        let receipt;
+        try {
+            // Wait up to 2 minutes for confirmation
+            receipt = await Promise.race([
+                transaction.wait(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Transaction timeout")), 120000)
+                )
+            ]);
+        } catch (waitError) {
+            console.error(`Transaction wait failed: ${waitError.message}`);
+            
+            // Try to get receipt manually after waiting
+            await sleep(30000);
+            try {
+                receipt = await provider.getTransactionReceipt(transaction.hash);
+                if (!receipt) {
+                    throw new Error("Transaction not found");
+                }
+            } catch (receiptError) {
+                console.error(`Failed to get receipt: ${receiptError.message}`);
+                return { success: false, reason: 'receipt_error', txHash: transaction.hash };
+            }
+        }
+        
+        if (receipt && receipt.status === 1) {
+            console.log(`✅ SUCCESS: ${index} - ${receipt.transactionHash}`);
+            console.log(`⛽ Gas used: ${receipt.gasUsed.toString()}`);
+            
+            // Try to parse events for additional info
+            try {
+                const swapExecutedEvent = receipt.logs.find(log => {
+                    try {
+                        const parsed = contract.interface.parseLog(log);
+                        return parsed.name === 'SwapExecuted';
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                if (swapExecutedEvent) {
+                    const parsed = contract.interface.parseLog(swapExecutedEvent);
+                    console.log(`📊 Swap executed for recipient: ${parsed.args.recipient}`);
+                }
+            } catch (eventError) {
+                console.log(`Could not parse swap events: ${eventError.message}`);
+            }
+            
+            return { 
+                success: true, 
+                txHash: receipt.transactionHash,
+                gasUsed: receipt.gasUsed.toString(),
+                walletIndex: index,
+                walletAddress: signer.address
+            };
+        } else {
+            console.log(`❌ FAILED: ${index} - ${receipt?.transactionHash || transaction.hash}`);
+            return { 
+                success: false, 
+                reason: 'transaction_failed', 
+                txHash: receipt?.transactionHash || transaction.hash 
+            };
+        }
+        
+    } catch (err) {
+        console.error(`Error for wallet ${index}:`, err.message);
+        
+        // Handle specific error types
+        if (err.code === 'INSUFFICIENT_FUNDS' || err.message.includes('insufficient funds')) {
+            console.log(`No funds in wallet ${index}`);
+            return { success: false, reason: 'insufficient_funds' };
+        } else if (err.code === 'NONCE_EXPIRED' || err.code === 'NONCE_TOO_LOW') {
+            console.log(`Nonce issue for wallet ${index}`);
+            return { success: false, reason: 'nonce_error' };
+        } else if (err.code === 'REPLACEMENT_UNDERPRICED') {
+            console.log(`Gas price too low for wallet ${index}`);
+            return { success: false, reason: 'gas_price_low' };
+        } else if (err.message.includes('gas')) {
+            console.log(`Gas related error for wallet ${index}:`, err.message);
+            return { success: false, reason: 'gas_error' };
+        } else if (err.message.includes('INVALID_ARGUMENT')) {
+            console.log(`ABI parsing error for wallet ${index}:`, err.message);
+            return { success: false, reason: 'abi_error' };
+        }
+        
+        return { success: false, reason: 'unknown_error', error: err.message };
+    }
+}
+
 // Help function
 function showHelp() {
     console.log(`
-Wallet Manager - Comprehensive Automation Tool
+🚀 TurboBot - Comprehensive DeFi Automation Tool
 
 WALLET MANAGEMENT:
   create [count]                     - Create new wallets (default: ${config.defaultWalletCount})
   target [total_count]               - Create wallets to reach target count
   check                              - Check wallet statistics and balances
 
+CONTRACT DEPLOYMENT & MANAGEMENT:
+  deploy [token_address]             - Deploy VolumeSwap contract for any token
+  withdraw [contract_address] [token_address] - Withdraw funds from specific contract
+  withdraw-token [token_address]     - Find and withdraw from contract by token address
+
+VOLUME GENERATION (NEW!):
+  volumeV2 [start] [end] [token_address]     - Infinite volume bot with balance validation
+                                            - Automatically deploys contract if needed
+                                            - Validates contract balances before starting
+                                            - Runs infinite loop with cycle tracking
 
 BATCH OPERATIONS:
   airdrop-batch [chunk_size] [total_eth]     - Send airdrops in batches (default: ${config.defaultChunkSize})
-  swap-batch [batch_size]  [tokenAddress]                   - Execute single token swaps (default: ${config.defaultBatchSize})
+  swap-batch [batch_size] [token_address]    - Execute single token swaps (default: ${config.defaultBatchSize})
   multiswap-batch [batch_size] [tokens]      - Execute multi-token swaps
-  swapv3-batch [batch_size] [tokenAddress]                 - Execute V3 swaps
+  swapv3-batch [batch_size] [token_address]  - Execute V3 swaps
 
 INDIVIDUAL OPERATIONS:
   airdrop [start] [end] [total_eth]          - Send airdrops to wallet range
-  swap [start] [end] [tokenAddress]                       - Single token swap for wallet range
+  swap [start] [end] [token_address]         - Single token swap for wallet range
   multiswap [start] [end] [tokens]           - Multi-token swap for wallet range
-  swapv3 [start] [end]                       - V3 swap for wallet range
+  swapv3 [start] [end] [token_address]       - V3 swap for wallet range
+
+CONTINUOUS AUTOMATION:
+  create-and-swap [tokens]           - Infinite: Create wallet → Fund → Multi-swap → Recover ETH
+  create-and-swapv3 [token_address]  - Infinite: Create wallet → Fund → V3 swap → Recover ETH
+  recoverETH [private_key] [receiver] - Emergency ETH recovery from any wallet
 
 TOKEN FORMAT:
   Comma-separated addresses: token1,token2,token3
@@ -1497,19 +2323,79 @@ DEFAULT TOKENS V2:
   LORDY:  ${defaultTokens["V2"][2]}
   WORKIE: ${defaultTokens["V2"][3]}
 
+DEFAULT TOKENS V3:
+  Ebert:     ${defaultTokens["V3"][0]}
+  BasedBonk: ${defaultTokens["V3"][1]}
+
+VOLUME GENERATION WORKFLOW:
+  1. Deploy contract:    node script.js deploy 0xTokenAddress
+  2. Fund contract:      Send ETH and tokens to deployed contract address
+  3. Generate volume:    node script.js volumeV2 0 500 0xTokenAddress
+  4. Monitor progress:   Real-time stats and cycle tracking
+  5. Withdraw funds:     node script.js withdraw-token 0xTokenAddress
+
 EXAMPLES:
-  node wallet_manager.js create 2000
-  node wallet_manager.js target 5000
-  node wallet_manager.js airdrop-batch 200 5.0              # Distribute 5 ETH among all wallets, 200 per chunk
-  node wallet_manager.js airdrop 0 100 0.5                  # Distribute 0.5 ETH among wallets 0-100
-  node wallet_manager.js airdrop-batch 500                  # Use default 0.0015 ETH per wallet
-  node wallet_manager.js multiswap-batch 25 "${defaultTokens["V2"].slice(0, 2).join(',')}"
+
+📝 Wallet Management:
+  node script.js create 2000
+  node script.js target 5000
+  node script.js check
+
+💰 Airdrop Operations:
+  node script.js airdrop-batch 200 5.0              # Distribute 5 ETH among all wallets, 200 per chunk
+  node script.js airdrop 0 100 0.5                  # Distribute 0.5 ETH among wallets 0-100
+  node script.js airdrop-batch 500                  # Use default 0.0015 ETH per wallet
+
+🏭 Contract Deployment:
+  node script.js deploy 0xc849418f46A25D302f55d25c40a82C99404E5245    # Deploy for KIKI
+  node script.js deploy 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460    # Deploy for TURBO
+
+📊 Volume Generation:
+  node script.js volumeV2                           # All wallets, random token
+  node script.js volumeV2 0 500                     # First 500 wallets, random token
+  node script.js volumeV2 0 100 0xc849418f46A25D302f55d25c40a82C99404E5245  # Specific range and token
+
+💸 Fund Withdrawal:
+  node script.js withdraw-token 0xc849418f46A25D302f55d25c40a82C99404E5245   # Withdraw KIKI contract
+  node script.js withdraw 0xContractAddress123...                        # Withdraw specific contract
+
+🔄 Traditional Swaps:
+  node script.js multiswap-batch 25 "${defaultTokens["V2"].slice(0, 2).join(',')}"
+  node script.js swapv3-batch 50 0xf83cde146AC35E99dd61b6448f7aD9a4534133cc
+
+🔄 Continuous Automation:
+  node script.js create-and-swap "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460,0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB"
+  node script.js create-and-swapv3 0xf83cde146AC35E99dd61b6448f7aD9a4534133cc
+  node script.js recoverETH your_private_key_here 0xYourMainWalletAddress
+
+🚀 MULTI-INSTANCE EXAMPLES:
+  # Run multiple volume bots simultaneously:
+  PK_MAIN=wallet1_key node script.js volumeV2 0 250 0xc849418f46A25D302f55d25c40a82C99404E5245
+  PK_MAIN=wallet2_key node script.js volumeV2 250 500 0xBA5E66FB16944Da22A62Ea4FD70ad02008744460
+
+  # Mix volume generation with traditional methods:
+  PK_MAIN=wallet1_key pm2 start script.js --name VolumeBot -- volumeV2 0 300 0xTokenAddr
+  PK_MAIN=wallet2_key pm2 start script.js --name TraditionalBot -- create-and-swap "0xToken1,0xToken2"
+
+⚠️  IMPORTANT NOTES:
+  • VolumeSwap contracts need both ETH and tokens to function properly
+  • Always fund contracts before running volume generation
+  • Use Ctrl+C to stop infinite loops (volumeV2, create-and-swap, create-and-swapv3)
+  • Test with small amounts before scaling up
+  • Monitor contract balances and withdraw funds regularly
 
 CONFIGURATION:
   All default values can be set in .env file:
   DEFAULT_WALLET_COUNT=${config.defaultWalletCount}
   DEFAULT_CHUNK_SIZE=${config.defaultChunkSize}
   DEFAULT_BATCH_SIZE=${config.defaultBatchSize}
+
+  Required environment variables:
+  RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+  PK_MAIN=your_funding_wallet_private_key_without_0x_prefix
+
+📚 For more detailed examples and advanced usage patterns, visit:
+   https://github.com/tiagoterron/TurboBot
 `);
 }
 
@@ -1662,9 +2548,9 @@ async function main() {
             case 'swapv3':
                 const walletsForV3 = loadWallets();
                 if (walletsForV3.length === 0) throw new Error('No wallets found');
-                const v3Start = parseInt(args[0]) || 0;
-                const v3End = parseInt(args[1]) || walletsForV3.length;
-                const v3Token = args[2] || random(defaultTokens["V3"]);
+                var v3Start = parseInt(args[0]) || 0;
+                var v3End = parseInt(args[1]) || walletsForV3.length;
+                var v3Token = args[2] || random(defaultTokens["V3"]);
 
                 let v3SuccessCount = 0;
                 let v3FailCount = 0;
@@ -1681,6 +2567,210 @@ async function main() {
                 
                 log(`V3 swap range completed: ${v3SuccessCount} successful, ${v3FailCount} failed`);
                 break;
+                case 'volumeV2':
+    var walletsForVolume = loadWallets();
+    if (walletsForVolume.length === 0) throw new Error('No wallets found');
+    
+    var v2Start = parseInt(args[0]) || 0;
+    var v2End = parseInt(args[1]) || walletsForVolume.length;
+    var v2Token = args[2] || random(defaultTokens["V2"]);
+
+    if (!config.fundingPrivateKey) {
+        throw new Error('PK_MAIN not configured in .env file');
+    }
+    
+    var mainWallet = new ethers.Wallet(config.fundingPrivateKey);
+    
+    log(`🎯 Starting VolumeV2 for token: ${v2Token}`);
+    log(`👛 Wallet range: ${v2Start} to ${v2End}`);
+    log(`📋 Total wallets available: ${walletsForVolume.length}`);
+    
+    // Get contract address for the token
+    const contractResult = await getContractAddress(v2Token, mainWallet.address, contracts.deployerContract);
+    
+    if (!contractResult.success) {
+        log(`❌ No contract found for token. Deploying new contract...`);
+        const deployResult = await deployContract(v2Token);
+        
+        if (!deployResult.success) {
+            throw new Error(`Failed to deploy contract: ${deployResult.reason || 'Unknown error'}`);
+        }
+        
+        log(`✅ Contract deployed successfully: ${deployResult.deployedContract}`);
+        log(`📤 Remember to fund the contract with ETH and/or tokens before running again!`);
+        return;
+    }
+    
+    const contractAddress = contractResult.contractAddress;
+    log(`✅ Using existing contract: ${contractAddress}`);
+    
+    // Check contract balances before starting
+    log(`🔍 Checking contract balances...`);
+    
+    const contractETHBalance = await provider.getBalance(contractAddress);
+    log(`💰 Contract ETH balance: ${ethers.utils.formatUnits(contractETHBalance, 18)} ETH`);
+    
+    // Check token balance in contract
+    const tokenContract = new ethers.Contract(v2Token, [
+        "function balanceOf(address) external view returns (uint256)",
+        "function symbol() external view returns (string)",
+        "function decimals() external view returns (uint8)"
+    ], provider);
+    
+    let contractTokenBalance;
+    let tokenSymbol = "TOKEN";
+    let tokenDecimals = 18;
+    
+    try {
+        contractTokenBalance = await tokenContract.balanceOf(contractAddress);
+        tokenSymbol = await tokenContract.symbol();
+        tokenDecimals = await tokenContract.decimals();
+        log(`🪙 Contract ${tokenSymbol} balance: ${ethers.utils.formatUnits(contractTokenBalance, tokenDecimals)} ${tokenSymbol}`);
+    } catch (tokenError) {
+        log(`⚠️  Could not check token balance: ${tokenError.message}`);
+        contractTokenBalance = ethers.BigNumber.from("0");
+    }
+    
+    // Check if contract has any balance to work with
+    if (contractETHBalance.eq(0) && contractTokenBalance.eq(0)) {
+        throw new Error(`
+❌ Contract has no ETH or token balance!
+
+📋 Instructions:
+1. Send ETH to contract: ${contractAddress}
+2. OR send ${tokenSymbol} tokens to contract: ${contractAddress}
+3. The contract needs balance to execute buy/sell operations
+
+💡 Tip: You can send both ETH and tokens for full functionality
+        `);
+    }
+    
+    // Show balance warnings
+    if (contractETHBalance.eq(0)) {
+        log(`⚠️  Contract has no ETH balance - will only be able to sell ${tokenSymbol} tokens`);
+    }
+    
+    if (contractTokenBalance.eq(0)) {
+        log(`⚠️  Contract has no ${tokenSymbol} balance - will only be able to buy ${tokenSymbol} tokens`);
+    }
+    
+    if (contractETHBalance.gt(0) && contractTokenBalance.gt(0)) {
+        log(`✅ Contract has both ETH and token balance - full buy/sell functionality available`);
+    } else {
+        log(`✅ Contract has sufficient balance to proceed with limited functionality`);
+    }
+    
+    var v2SuccessCount = 0;
+    var v2FailCount = 0;
+    var totalCycles = 0;
+    var currentIndex = v2Start;
+    
+    log(`\n🔄 Starting infinite volume bot loop for wallets ${v2Start}-${v2End}`);
+    log(`📄 Contract: ${contractAddress}`);
+    log(`🎯 Token: ${v2Token} (${tokenSymbol})`);
+    log(`👛 Total wallets in range: ${Math.min(v2End, walletsForVolume.length) - v2Start}`);
+    log(`⏹️  Press Ctrl+C to stop the infinite loop\n`);
+    
+    // Infinite loop
+    while (true) {
+        try {
+            const walletProgress = `${currentIndex - v2Start + 1}/${Math.min(v2End, walletsForVolume.length) - v2Start}`;
+            log(`📊 Cycle ${totalCycles + 1} - Wallet ${walletProgress} (Index: ${currentIndex})`);
+            
+            const result = await volumeBotV2(currentIndex, walletsForVolume, contractAddress);
+            
+            if (result && result.success) {
+                v2SuccessCount++;
+                log(`✅ Wallet ${currentIndex} successful (Total success: ${v2SuccessCount})`);
+            } else {
+                v2FailCount++;
+                const reason = result?.reason || 'unknown';
+                log(`❌ Wallet ${currentIndex} failed: ${reason} (Total failed: ${v2FailCount})`);
+                
+                // Handle specific failure cases
+                if (reason === 'insufficient_funds') {
+                    log(`💸 Wallet ${currentIndex} has insufficient funds - skipping`);
+                } else if (reason === 'insufficient_gas') {
+                    log(`⛽ Wallet ${currentIndex} cannot afford gas - skipping`);
+                }
+            }
+            
+            // Move to next wallet
+            currentIndex++;
+            
+            // Check if we've reached the end of the range
+            if (currentIndex >= Math.min(v2End, walletsForVolume.length)) {
+                totalCycles++;
+                currentIndex = v2Start; // Reset to beginning
+                
+                const totalProcessed = v2SuccessCount + v2FailCount;
+                const successRate = totalProcessed > 0 ? ((v2SuccessCount / totalProcessed) * 100).toFixed(2) : '0.00';
+                
+                log(`\n🔄 Cycle ${totalCycles} completed! Starting new cycle...`);
+                log(`📈 Cumulative Stats:`);
+                log(`   • Total Processed: ${totalProcessed}`);
+                log(`   • Successful: ${v2SuccessCount}`);
+                log(`   • Failed: ${v2FailCount}`);
+                log(`   • Success Rate: ${successRate}%`);
+                log(`   • Cycles Completed: ${totalCycles}`);
+                log(`🔄 Looping back to wallet ${v2Start}\n`);
+                
+                // Add a longer delay between cycles
+                await sleep(3000);
+            } else {
+                // Regular delay between individual transactions
+                await sleep(150);
+            }
+            
+            // Log progress every 25 transactions
+            if ((v2SuccessCount + v2FailCount) % 25 === 0 && (v2SuccessCount + v2FailCount) > 0) {
+                const totalProcessed = v2SuccessCount + v2FailCount;
+                const successRate = ((v2SuccessCount / totalProcessed) * 100).toFixed(2);
+                log(`📊 Progress Update - Processed: ${totalProcessed}, Success: ${v2SuccessCount}, Failed: ${v2FailCount}, Rate: ${successRate}%`);
+            }
+            
+        } catch (err) {
+            v2FailCount++;
+            errorLog(`💥 Unexpected error for wallet ${currentIndex}: ${err.message}`);
+            
+            // Move to next wallet even on error
+            currentIndex++;
+            
+            // Reset if at end
+            if (currentIndex >= Math.min(v2End, walletsForVolume.length)) {
+                totalCycles++;
+                currentIndex = v2Start;
+                log(`🔄 Error occurred, but continuing to next cycle (${totalCycles})`);
+                await sleep(2000);
+            } else {
+                await sleep(1000); // Longer delay on error
+            }
+        }
+    }
+    
+    break;
+
+    case 'withdraw':
+    var contractAddr = args[0];
+    var tokenAddr = args[1] || null;
+    
+    if (!contractAddr) {
+        throw new Error('Contract address required. Usage: withdraw <contract_address> [token_address]');
+    }
+    
+    await withdrawFromContract(contractAddr, tokenAddr);
+    break;
+
+case 'withdraw-token':
+    var tokenAddr = args[0];
+    
+    if (!tokenAddr) {
+        throw new Error('Token address required. Usage: withdraw-token <token_address>');
+    }
+    
+    await withdrawByToken(tokenAddr);
+    break;
+
                 
             default:
                 errorLog(`Unknown command: ${command}`);
