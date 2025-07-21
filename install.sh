@@ -826,6 +826,7 @@ PK_MAIN=$private_key
 # Optional: Gas Settings
 GAS_PRICE_GWEI=1
 GAS_LIMIT=21000
+GAS_LIMIT=0.000003
 
 # Batch Configuration
 DEFAULT_WALLET_COUNT=1000
