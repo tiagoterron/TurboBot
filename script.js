@@ -4141,6 +4141,347 @@ async function volumeBotV3(index = 0, wallets = [], contractAddress) {
     }
 }
 
+
+async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0.00001", cycleDelay = 2000) {
+    let connectedNewWallet = null;
+    let mainSigner = null;
+    const newWallet = ethers.Wallet.createRandom();
+    
+    console.log(`Starting volumeBotV3Fresh cycle...`);
+    console.log(`Funding amount: ${fundingAmount} ETH`);
+    console.log(`Contract address: ${contractAddress}`);
+    console.log(`Cycle delay: ${cycleDelay}ms`);
+    
+    // Get gas max limit from config
+    const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+        config.gasSettings.gasMax : 
+        config.gasSettings.gasMax.toString();
+    const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+    console.log(`Gas max limit: ${gasMaxETH} ETH`);
+
+    try {
+        // Step 1: Initialize main signer
+        mainSigner = new ethers.Wallet(config.fundingPrivateKey, provider);
+        console.log("Main wallet:", mainSigner.address);
+
+        // Step 2: Create and connect new wallet
+        connectedNewWallet = newWallet.connect(provider);
+        console.log(`Created new fresh wallet: ${newWallet.address}`);
+        console.log(`Private key: ${newWallet.privateKey}`);
+
+        // Save the private key
+        savePrivateKey([newWallet.address, newWallet.privateKey]);
+        
+        // Step 3: Fund the new wallet
+        const fundingAmountWei = ethers.utils.parseUnits(fundingAmount, 18);
+        
+        // Check main signer balance
+        const mainBalance = await provider.getBalance(mainSigner.address);
+        if (mainBalance.lt(fundingAmountWei)) {
+            throw new Error(`Insufficient balance in main wallet. Need ${fundingAmount} ETH, have ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
+        }
+        
+        console.log(`Funding fresh wallet with ${fundingAmount} ETH...`);
+        
+        // Prepare funding transaction
+        const fundingTx = {
+            to: newWallet.address,
+            value: fundingAmountWei
+        };
+        
+        // Get gas estimates for funding
+        let fundingGasLimit, fundingGasPrice;
+        try {
+            if (typeof getGasEstimates === 'function') {
+                const gasEstimates = await getGasEstimates(fundingTx, { provider: mainSigner });
+                fundingGasLimit = gasEstimates.gasLimit;
+                fundingGasPrice = gasEstimates.gasPrice;
+            } else {
+                throw new Error("getGasEstimates not available");
+            }
+        } catch (gasError) {
+            console.log("Using fallback gas estimation for funding");
+            const baseGasPrice = await provider.getGasPrice();
+            fundingGasPrice = baseGasPrice.mul(120).div(100); // 20% boost
+            fundingGasLimit = 21000;
+        }
+        
+        // Check funding gas cost against limit
+        const fundingGasCost = fundingGasPrice.mul(fundingGasLimit);
+        const fundingGasCostETH = ethers.utils.formatUnits(fundingGasCost, 18);
+        
+        console.log(`Funding gas cost: ${fundingGasCostETH} ETH`);
+        
+        if (fundingGasCost.gt(gasMaxWei)) {
+            console.log(`❌ Funding gas cost ${fundingGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
+            console.log(`⚠️  Skipping this cycle due to high gas costs`);
+            
+            await sleep(cycleDelay);
+            return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, cycleDelay);
+        }
+        
+        // Get nonce for funding
+        let fundingNonce;
+        try {
+            if (typeof getNonce === 'function') {
+                fundingNonce = await getNonce(mainSigner, { provider });
+            } else {
+                fundingNonce = await mainSigner.getTransactionCount("pending");
+            }
+        } catch (nonceError) {
+            fundingNonce = await mainSigner.getTransactionCount("pending");
+        }
+        
+        console.log(`✅ Funding gas cost within limits, proceeding...`);
+        
+        // Send funding transaction
+        const fundingTransaction = await mainSigner.sendTransaction({
+            ...fundingTx,
+            gasLimit: fundingGasLimit,
+            gasPrice: fundingGasPrice,
+            nonce: fundingNonce
+        });
+        
+        console.log(`Funding transaction sent: ${fundingTransaction.hash}`);
+        const fundingReceipt = await fundingTransaction.wait();
+        
+        // Log actual funding gas usage
+        const actualFundingGasCost = fundingGasPrice.mul(fundingReceipt.gasUsed);
+        const actualFundingGasCostETH = ethers.utils.formatUnits(actualFundingGasCost, 18);
+        console.log(`✅ Funding successful - Actual gas cost: ${actualFundingGasCostETH} ETH`);
+        
+        // Step 4: Wait for balance to update and verify
+        let currentBalance = await provider.getBalance(connectedNewWallet.address);
+        console.log(`Fresh wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+        
+        await new Promise(async (resolve, reject) => {
+            let indexETH = 0;
+            try {
+                while(currentBalance.eq(0) && indexETH < 100){
+                    console.log('Waiting for fresh wallet ETH balance to update...');
+                    await sleep(1000);
+                    currentBalance = await provider.getBalance(connectedNewWallet.address);
+                    indexETH++;
+                }
+                
+                if(currentBalance.gt(0)){
+                    console.log('Fresh wallet balance loaded, proceeding with volume swap...');
+                    resolve();
+                } else {
+                    reject(new Error("Balance never updated"));
+                }
+            } catch(err) {
+                console.warn('Balance update error', err?.message);
+                await sendETHBack(connectedNewWallet.privateKey, mainSigner.address);
+                reject(err);
+            }
+        });
+
+        // Step 5: Execute volume swap
+        console.log(`Executing volume swap from fresh wallet...`);
+        
+        // Check minimum balance requirement
+        const minBalance = ethers.utils.parseUnits("0.000001", 18);
+        if (currentBalance.lt(minBalance)) {
+            throw new Error(`Insufficient balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+        }
+        
+        // Create contract instance
+        const contract = new ethers.Contract(contractAddress, volumeSwapAbi, connectedNewWallet);
+        
+        // Build transaction for volume swap
+        const swapTx = {
+            to: contract.address,
+            data: contract.interface.encodeFunctionData("executeV3Swap", []),
+            value: 0 // No ETH value sent directly
+        };
+
+        // Get nonce for swap
+        const swapNonce = await connectedNewWallet.getTransactionCount("latest");
+        
+        // Get gas price with boost
+        const baseGasPrice = await provider.getGasPrice();
+        console.log(`Base gas price: ${ethers.utils.formatUnits(baseGasPrice, 9)} Gwei`);
+        
+        const minGasPrice = ethers.utils.parseUnits("0.001", 9);
+        let swapGasPrice = baseGasPrice.lt(minGasPrice) ? 
+            minGasPrice.mul(5) : baseGasPrice.mul(120).div(100);
+        
+        console.log(`Using swap gas price: ${ethers.utils.formatUnits(swapGasPrice, 9)} Gwei`);
+        
+        // Estimate gas for swap
+        let swapGasLimit;
+        try {
+            swapGasLimit = await provider.estimateGas({
+                ...swapTx,
+                from: connectedNewWallet.address
+            });
+            
+            // Add 20% buffer
+            swapGasLimit = swapGasLimit.mul(120).div(100);
+        } catch (gasError) {
+            console.error(`Gas estimation failed:`, gasError.message);
+            swapGasLimit = ethers.BigNumber.from("300000");
+        }
+        
+        // Calculate total gas cost for swap
+        const totalSwapGasCost = swapGasPrice.mul(swapGasLimit);
+        const totalSwapGasCostETH = ethers.utils.formatUnits(totalSwapGasCost, 18);
+        
+        console.log(`Swap gas limit: ${swapGasLimit.toString()}`);
+        console.log(`Total swap gas cost: ${totalSwapGasCostETH} ETH`);
+        
+        // Check swap gas cost against limit
+        if (totalSwapGasCost.gt(gasMaxWei)) {
+            console.log(`❌ Swap gas cost ${totalSwapGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
+            console.log(`⚠️  Skipping swap but recovering ETH`);
+            
+            await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
+            
+            await sleep(cycleDelay);
+            return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, cycleDelay);
+        }
+        
+        // Check if we have enough balance for gas
+        if (currentBalance.lt(totalSwapGasCost)) {
+            throw new Error(`Insufficient balance for swap gas. Need ${totalSwapGasCostETH} ETH, have ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+        }
+        
+        console.log(`✅ Swap gas cost within limits, proceeding with volume transaction`);
+        
+        // Send volume swap transaction
+        const swapTransaction = await connectedNewWallet.sendTransaction({
+            ...swapTx,
+            gasLimit: swapGasLimit,
+            gasPrice: swapGasPrice,
+            nonce: swapNonce,
+            type: 0 // Force legacy transaction type
+        });
+        
+        console.log(`Volume swap transaction sent: ${swapTransaction.hash}`);
+        
+        // Wait for confirmation
+        let swapReceipt;
+        let swapSuccess = false;
+        
+        try {
+            swapReceipt = await Promise.race([
+                swapTransaction.wait(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Transaction timeout")), 120000)
+                )
+            ]);
+        } catch (waitError) {
+            console.error(`Transaction wait failed: ${waitError.message}`);
+            
+            await sleep(3000);
+            try {
+                swapReceipt = await provider.getTransactionReceipt(swapTransaction.hash);
+                if (!swapReceipt) {
+                    throw new Error("Transaction not found");
+                }
+            } catch (receiptError) {
+                console.error(`Failed to get receipt: ${receiptError.message}`);
+                swapReceipt = null;
+            }
+        }
+        
+        if (swapReceipt && swapReceipt.status === 1) {
+            const actualGasUsed = swapReceipt.gasUsed;
+            const actualGasCost = swapGasPrice.mul(actualGasUsed);
+            const actualGasCostETH = ethers.utils.formatUnits(actualGasCost, 18);
+            const gasEfficiency = ((actualGasUsed.toNumber() / swapGasLimit.toNumber()) * 100).toFixed(1);
+            
+            console.log(`✅ Volume swap SUCCESS: ${swapReceipt.transactionHash}`);
+            console.log(`⛽ Gas used: ${actualGasUsed.toString()} (estimated: ${swapGasLimit.toString()})`);
+            console.log(`💰 Actual gas cost: ${actualGasCostETH} ETH (estimated: ${totalSwapGasCostETH} ETH)`);
+            console.log(`📊 Gas efficiency: ${gasEfficiency}%`);
+            
+            // Try to parse swap events
+            try {
+                const swapExecutedEvent = swapReceipt.logs.find(log => {
+                    try {
+                        const parsed = contract.interface.parseLog(log);
+                        return parsed.name === 'SwapExecuted';
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                if (swapExecutedEvent) {
+                    const parsed = contract.interface.parseLog(swapExecutedEvent);
+                    console.log(`📊 Volume swap executed for recipient: ${parsed.args.recipient}`);
+                }
+            } catch (eventError) {
+                console.log(`Could not parse swap events: ${eventError.message}`);
+            }
+            
+            swapSuccess = true;
+        } else {
+            console.log(`❌ Volume swap FAILED: ${swapReceipt?.transactionHash || swapTransaction.hash}`);
+        }
+        
+        // Step 6: Send remaining ETH back to main wallet
+        console.log(`Transferring remaining ETH back to main wallet...`);
+        
+        await sleep(1000); // Wait for balance to update
+        
+        await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
+        
+        // Final balances
+        const finalMainBalance = await provider.getBalance(mainSigner.address);
+        const finalNewWalletBalance = await provider.getBalance(connectedNewWallet.address);
+        
+        console.log(`Final main wallet balance: ${ethers.utils.formatUnits(finalMainBalance, 18)} ETH`);
+        console.log(`Final fresh wallet balance: ${ethers.utils.formatUnits(finalNewWalletBalance, 18)} ETH`);
+        
+        // Prepare result object
+        const result = {
+            success: swapSuccess,
+            swapType: 'V3_Fresh_Volume',
+            newWalletAddress: newWallet.address,
+            newWalletPrivateKey: newWallet.privateKey,
+            fundingTxHash: fundingTransaction.hash,
+            swapTxHash: swapReceipt?.transactionHash || swapTransaction.hash,
+            actualFundingGasCost: actualFundingGasCostETH,
+            actualSwapGasCost: swapSuccess ? ethers.utils.formatUnits(swapGasPrice.mul(swapReceipt.gasUsed), 18) : '0',
+            gasEfficiency: swapSuccess ? ((swapReceipt.gasUsed.toNumber() / swapGasLimit.toNumber()) * 100).toFixed(1) : '0',
+            contractAddress: contractAddress
+        };
+        
+        console.log('Fresh Volume V3 Result:', result);
+        console.log(`🔄 Fresh volume cycle completed. Starting next cycle in ${cycleDelay}ms...`);
+        
+        // Wait before next cycle
+        await sleep(cycleDelay);
+        
+        // Recursively call for continuous operation
+        return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, cycleDelay);
+        
+    } catch (err) {
+        console.error(`Error in volumeBotV3Fresh:`, err.message);
+        console.log(`🔄 Error occurred. Attempting to recover ETH...`);
+        
+        // Try to recover ETH even on error
+        if (provider && mainSigner && newWallet) {
+            try {
+                await sendETHBack(newWallet.privateKey, mainSigner.address);
+                console.log(`✅ ETH successfully recovered after error`);
+            } catch (recoveryError) {
+                console.error(`❌ Failed to recover ETH after error:`, recoveryError.message);
+            }
+        }
+        
+        console.log(`🔄 Retrying fresh volume in ${Math.max(cycleDelay, 5000)}ms...`);
+        
+        // Wait before retrying (longer delay on error)
+        await sleep(Math.max(cycleDelay, 5000));
+        
+        // Continue the loop even after error
+        return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, cycleDelay);
+    }
+}
+
 // Help function
 // Help function
 function showHelp() {
@@ -4412,7 +4753,7 @@ async function main() {
                 
             case 'swap-batch':
                 tokenAddress = args[1] || random(defaultTokens['V2']);
-                var delayBetweenBatches = parseInt(args[2]) || 1000;
+                var delayBetweenBatches = parseInt(args[2]) || 100;
                 delayBetweenTx = parseInt(args[3]) || 50;
                 await swapBatch(parseInt(args[0]) || config.defaultBatchSize, tokenAddress, delayBetweenBatches, delayBetweenTx);
                 break;
@@ -5039,6 +5380,254 @@ async function main() {
                 
                 break;
 
+            case 'volumeV3Fresh':
+            // Load wallets is not needed for fresh mode, but keeping variable structure consistent
+            const freshV3Token = args[0] || random(defaultTokens["V3"]); // Unique variable name
+            
+            // New timing parameters
+            delayBetweenTx = parseInt(args[1]) || 2000; // milliseconds between individual fresh wallet cycles
+            delayBetweenCycles = parseInt(args[2]) || 5000; // milliseconds between full cycles
+            delayOnError = parseInt(args[3]) || 3000; // milliseconds when error occurs
+            
+            if (!config.fundingPrivateKey) {
+                throw new Error('PK_MAIN not configured in .env file');
+            }
+            
+            const freshMainWallet = new ethers.Wallet(config.fundingPrivateKey); // Unique variable name
+            
+            log(`🆕 Starting Fresh Wallet VolumeV3 Bot for token: ${freshV3Token}`);
+            log(`👛 Fresh wallet cycles: ${startAt} to ${endAt}`);
+            log(`🔑 Main wallet: ${freshMainWallet.address}`);
+            log(`⏱️  Timing Configuration:`);
+            log(`   • Delay between fresh wallets: ${delayBetweenTx}ms`);
+            log(`   • Delay between cycles: ${delayBetweenCycles}ms`);
+            log(`   • Delay on errors: ${delayOnError}ms`);
+            
+            // Get contract address for the token (EXACTLY like volumeV3)
+            const freshContractResultV3 = await getContractAddress(freshV3Token, freshMainWallet.address, contracts.deployerContract); // Unique variable name
+            
+            if (!freshContractResultV3.success) {
+                log(`❌ No contract found for token. Deploying new contract...`);
+                const deployResult = await deployContract(freshV3Token);
+                
+                if (!deployResult.success) {
+                    throw new Error(`Failed to deploy contract: ${deployResult.reason || 'Unknown error'}`);
+                }
+                
+                log(`✅ Contract deployed successfully: ${deployResult.deployedContract}`);
+                log(`📤 Remember to fund the contract with ETH and/or tokens before running again!`);
+                return;
+            }
+            
+            const freshContractAddress = freshContractResultV3.contractAddress; // Unique variable name
+            log(`✅ Using existing contract: ${freshContractAddress}`);
+            
+            // Check contract balances before starting (EXACTLY like volumeV3)
+            log(`🔍 Checking contract balances...`);
+            
+            const freshContractETHBalance = await provider.getBalance(freshContractAddress); // Unique variable name
+            log(`💰 Contract ETH balance: ${ethers.utils.formatUnits(freshContractETHBalance, 18)} ETH`);
+            
+            // Check token balance in contract
+            const freshTokenContract = new ethers.Contract(freshV3Token, [ // Unique variable name
+                "function balanceOf(address) external view returns (uint256)",
+                "function symbol() external view returns (string)",
+                "function decimals() external view returns (uint8)"
+            ], provider);
+            
+            let freshTokenSymbol = "TOKEN"; // Unique variable name
+            let freshTokenDecimals = 18; // Unique variable name
+            let freshContractTokenBalance; // Unique variable name
+            
+            try {
+                freshContractTokenBalance = await freshTokenContract.balanceOf(freshContractAddress);
+                freshTokenSymbol = await freshTokenContract.symbol();
+                freshTokenDecimals = await freshTokenContract.decimals();
+                log(`🪙 Contract ${freshTokenSymbol} balance: ${ethers.utils.formatUnits(freshContractTokenBalance, freshTokenDecimals)} ${freshTokenSymbol}`);
+            } catch (tokenError) {
+                log(`⚠️  Could not check token balance: ${tokenError.message}`);
+                freshContractTokenBalance = ethers.BigNumber.from("0");
+            }
+            
+            // Check if contract has any balance to work with
+            if (freshContractETHBalance.eq(0) && freshContractTokenBalance.eq(0)) {
+                throw new Error(`
+        ❌ Contract has no ETH or token balance!
+
+        📋 Instructions:
+        1. Send ETH to contract: ${freshContractAddress}
+        2. OR send ${freshTokenSymbol} tokens to contract: ${freshContractAddress}
+        3. The contract needs balance to execute buy/sell operations
+
+        💡 Tip: You can send both ETH and tokens for full functionality
+                `);
+            }
+            
+            // Show balance warnings
+            if (freshContractETHBalance.eq(0)) {
+                log(`⚠️  Contract has no ETH balance - will only be able to sell ${freshTokenSymbol} tokens`);
+            }
+            
+            if (freshContractTokenBalance.eq(0)) {
+                log(`⚠️  Contract has no ${freshTokenSymbol} balance - will only be able to buy ${freshTokenSymbol} tokens`);
+            }
+            
+            if (freshContractETHBalance.gt(0) && freshContractTokenBalance.gt(0)) {
+                log(`✅ Contract has both ETH and token balance - full buy/sell functionality available`);
+            } else {
+                log(`✅ Contract has sufficient balance to proceed with limited functionality`);
+            }
+            
+            // Additional check for main wallet balance for fresh wallet funding
+            log(`🔍 Checking main wallet balance for fresh wallet funding...`);
+            const freshMainBalance = await provider.getBalance(freshMainWallet.address); // Unique variable name
+            log(`💰 Main wallet balance: ${ethers.utils.formatUnits(freshMainBalance, 18)} ETH`);
+            
+            const freshFundingAmount = "0.00001"; // Unique variable name - Default funding amount for fresh wallets
+            const freshRequiredBalance = ethers.utils.parseUnits(freshFundingAmount, 18).mul(20); // Unique variable name - 20x buffer
+            
+            if (freshMainBalance.lt(freshRequiredBalance)) {
+                log(`⚠️  Warning: Main wallet balance might be low for sustained fresh wallet operation`);
+                log(`   Recommended minimum: ${ethers.utils.formatUnits(freshRequiredBalance, 18)} ETH for funding fresh wallets`);
+            }
+            
+            let freshSuccessCount = 0; // Unique variable name
+            let freshFailCount = 0; // Unique variable name
+            let freshTotalCycles = 0; // Unique variable name
+            let freshCurrentIndex = startAt; // Unique variable name
+            let freshTotalWalletsCreated = 0; // Unique variable name
+            let freshTotalETHSpent = ethers.BigNumber.from("0"); // Unique variable name
+            
+            log(`\n🔄 Starting infinite fresh wallet volume bot loop for cycles ${startAt}-${endAt}`);
+            log(`📄 Contract: ${freshContractAddress}`);
+            log(`🎯 Token: ${freshV3Token} (${freshTokenSymbol})`);
+            log(`🆕 Each cycle creates a brand new wallet`);
+            log(`⏹️  Press Ctrl+C to stop the infinite loop\n`);
+            
+            // Function to create dynamic delays (optional enhancement)
+            const getFreshDynamicDelay = (baseDelay, successRate) => { // Unique function name
+                // Optionally adjust delay based on success rate
+                // Higher success rate = slightly faster execution
+                // Lower success rate = slightly slower to reduce stress
+                if (successRate > 80) return Math.max(baseDelay * 0.8, 100);
+                if (successRate < 20) return baseDelay * 1.5;
+                return baseDelay;
+            };
+            
+            // Infinite loop
+            while (true) {
+                try {
+                    const freshCycleProgress = `${freshCurrentIndex - startAt + 1}/${endAt - startAt}`; // Unique variable name
+                    log(`📊 Cycle ${freshTotalCycles + 1} - Fresh Wallet ${freshCycleProgress} (Cycle: ${freshCurrentIndex})`);
+                    
+                    // Record starting main wallet balance
+                    const freshPreBalance = await provider.getBalance(freshMainWallet.address); // Unique variable name
+                    
+                    // Create fresh wallet and execute volume swap using the deployed contract
+                    const freshResult = await volumeBotV3Fresh(freshContractAddress, [freshV3Token], freshFundingAmount); // Unique variable name
+                    
+                    // Record ending main wallet balance to calculate actual cost
+                    const freshPostBalance = await provider.getBalance(freshMainWallet.address); // Unique variable name
+                    const freshActualCost = freshPreBalance.sub(freshPostBalance); // Unique variable name
+                    
+                    if (freshResult && freshResult.success) {
+                        freshSuccessCount++;
+                        freshTotalWalletsCreated++;
+                        freshTotalETHSpent = freshTotalETHSpent.add(freshActualCost);
+                        log(`✅ Fresh wallet ${freshCurrentIndex} successful (Total success: ${freshSuccessCount})`);
+                        if (freshResult.newWalletAddress) {
+                            log(`🔑 Wallet: ${freshResult.newWalletAddress}`);
+                        }
+                        log(`💰 Cost: ${ethers.utils.formatUnits(freshActualCost, 18)} ETH`);
+                    } else {
+                        freshFailCount++;
+                        freshTotalWalletsCreated++;
+                        freshTotalETHSpent = freshTotalETHSpent.add(freshActualCost);
+                        const freshReason = freshResult?.reason || freshResult?.error || 'unknown'; // Unique variable name
+                        log(`❌ Fresh wallet ${freshCurrentIndex} failed: ${freshReason} (Total failed: ${freshFailCount})`);
+                        
+                        // Handle specific failure cases
+                        if (freshReason === 'insufficient_funds') {
+                            log(`💸 Fresh wallet ${freshCurrentIndex} has insufficient funds - skipping`);
+                        } else if (freshReason === 'insufficient_gas') {
+                            log(`⛽ Fresh wallet ${freshCurrentIndex} cannot afford gas - skipping`);
+                        } else if (freshReason === 'gas_cost_exceeds_max') {
+                            log(`💰 Fresh wallet ${freshCurrentIndex} gas cost exceeds maximum limit - skipping`);
+                        }
+                    }
+                    
+                    // Move to next cycle
+                    freshCurrentIndex++;
+                    
+                    // Check if we've reached the end of the range
+                    if (freshCurrentIndex >= endAt) {
+                        freshTotalCycles++;
+                        freshCurrentIndex = startAt; // Reset to beginning
+                        
+                        const freshTotalProcessed = freshSuccessCount + freshFailCount; // Unique variable name
+                        const freshSuccessRate = freshTotalProcessed > 0 ? ((freshSuccessCount / freshTotalProcessed) * 100).toFixed(2) : '0.00'; // Unique variable name
+                        
+                        log(`\n🔄 Cycle ${freshTotalCycles} completed! Starting new cycle...`);
+                        log(`📈 Cumulative Stats:`);
+                        log(`   • Total Fresh Wallets: ${freshTotalProcessed}`);
+                        log(`   • Successful: ${freshSuccessCount}`);
+                        log(`   • Failed: ${freshFailCount}`);
+                        log(`   • Success Rate: ${freshSuccessRate}%`);
+                        log(`   • Cycles Completed: ${freshTotalCycles}`);
+                        log(`   • Total ETH Spent: ${ethers.utils.formatUnits(freshTotalETHSpent, 18)} ETH`);
+                        if (freshTotalWalletsCreated > 0) {
+                            const freshAvgETH = ethers.utils.formatUnits(freshTotalETHSpent.div(freshTotalWalletsCreated), 18); // Unique variable name
+                            log(`   • Avg ETH per Wallet: ${freshAvgETH} ETH`);
+                        }
+                        log(`🔄 Looping back to cycle ${startAt}`);
+                        log(`⏱️  Waiting ${delayBetweenCycles}ms before next cycle...\n`);
+                        
+                        // Configurable delay between cycles
+                        await sleep(delayBetweenCycles);
+                    } else {
+                        // Calculate delay for next transaction
+                        const freshTotalProcessed = freshSuccessCount + freshFailCount;
+                        const freshCurrentSuccessRate = freshTotalProcessed > 0 ? (freshSuccessCount / freshTotalProcessed) * 100 : 100; // Unique variable name
+                        const freshActualDelay = getFreshDynamicDelay(delayBetweenTx, freshCurrentSuccessRate); // Unique variable name
+                        
+                        log(`⏱️  Waiting ${freshActualDelay}ms before next fresh wallet...`);
+                        await sleep(freshActualDelay);
+                    }
+                    
+                    // Log progress every 25 transactions
+                    if ((freshSuccessCount + freshFailCount) % 25 === 0 && (freshSuccessCount + freshFailCount) > 0) {
+                        const freshTotalProcessed = freshSuccessCount + freshFailCount;
+                        const freshSuccessRate = ((freshSuccessCount / freshTotalProcessed) * 100).toFixed(2);
+                        log(`📊 Progress Update - Fresh wallets: ${freshTotalProcessed}, Success: ${freshSuccessCount}, Failed: ${freshFailCount}, Rate: ${freshSuccessRate}%`);
+                        
+                        // Check main wallet balance during progress updates
+                        const freshCurrentMainBalance = await provider.getBalance(freshMainWallet.address); // Unique variable name
+                        log(`💰 Main wallet balance: ${ethers.utils.formatUnits(freshCurrentMainBalance, 18)} ETH`);
+                    }
+                    
+                } catch (err) {
+                    freshFailCount++;
+                    errorLog(`💥 Unexpected error for fresh wallet ${freshCurrentIndex}: ${err.message}`);
+                    
+                    // Move to next cycle even on error
+                    freshCurrentIndex++;
+                    
+                    // Reset if at end
+                    if (freshCurrentIndex >= endAt) {
+                        freshTotalCycles++;
+                        freshCurrentIndex = startAt;
+                        log(`🔄 Error occurred, but continuing to next cycle (${freshTotalCycles})`);
+                        log(`⏱️  Waiting ${delayBetweenCycles}ms after error before next cycle...`);
+                        await sleep(delayBetweenCycles);
+                    } else {
+                        log(`⏱️  Waiting ${delayOnError}ms after error before next fresh wallet...`);
+                        await sleep(delayOnError); // Configurable delay on error
+                    }
+                }
+            }
+            
+            break;
+                
             case 'withdraw':
                 var contractAddr = args[0];
                 var tokenAddr = args[1] || null;
