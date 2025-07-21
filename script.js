@@ -11,7 +11,7 @@ const config = {
     defaultWalletCount: parseInt(process.env.DEFAULT_WALLET_COUNT) || 1000,
     defaultChunkSize: parseInt(process.env.DEFAULT_CHUNK_SIZE) || 500,
     defaultBatchSize: parseInt(process.env.DEFAULT_BATCH_SIZE) || 50,
-    defaultV3Fee: 10000,
+    defaultV3Fee: parseInt(process.env.DEFAULT_V3_FEE) || 10000,
     gasSettings: {
         gasPrice: process.env.GAS_PRICE_GWEI ? ethers.utils.parseUnits(process.env.GAS_PRICE_GWEI, 9) : null,
         gasLimit: process.env.GAS_LIMIT ? parseInt(process.env.GAS_LIMIT) : null,
