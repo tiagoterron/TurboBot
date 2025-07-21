@@ -11,6 +11,7 @@ const config = {
     defaultWalletCount: parseInt(process.env.DEFAULT_WALLET_COUNT) || 1000,
     defaultChunkSize: parseInt(process.env.DEFAULT_CHUNK_SIZE) || 500,
     defaultBatchSize: parseInt(process.env.DEFAULT_BATCH_SIZE) || 50,
+    defaultV3Fee: 10000,
     gasSettings: {
         gasPrice: process.env.GAS_PRICE_GWEI ? ethers.utils.parseUnits(process.env.GAS_PRICE_GWEI, 9) : null,
         gasLimit: process.env.GAS_LIMIT ? parseInt(process.env.GAS_LIMIT) : null,
@@ -23,8 +24,10 @@ const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
 
 const contracts = {
     uniswapRouter: "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24",
+    uniswapRouterV3: "0x2626664c2603336E57B271c5C0b26F421741e481",
     airdropContract: "0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3",
     multicallSwap: "0x0D99F3072fDbEDFFFf920f166F3B5d7e2bE32Ba0",
+    multicallSwapV3: "0xa960Fb933b4eD5130e140824c67a6d7c4c5118a2",
     deployerContract: "0xf3751f6a3900879b76023bDAD40286d86E61883b",
     v3SwapContract: "0xe9d7E6669C39350DD6664fd6fB66fCE4D871D374"
 };
@@ -38,6 +41,11 @@ const airdropAbi = [
 ];
 
 const multicallAbi = [
+    "function executeMultiSwapV3(tuple(address tokenAddress, uint256 ethAmount, address recipient, uint24 fee, uint256 minAmountOut)[] swapDetails) external payable",
+    "function executeMultiTokenSwap(address[] tokenAddresses, uint256 ethAmountPerToken, address recipient, uint24 fee, uint256 minAmountOut) external payable",
+    "function executeMultiFeeSwap(address tokenAddress, uint256 ethAmountPerSwap, address recipient, uint24[] fees, uint256 minAmountOut) external payable",
+    "function quickMultiSwap(address[] tokenAddresses, uint256 ethAmountPerToken, address recipient) external payable",
+    
     "function executeMultiSwap(tuple(address tokenAddress, uint256 ethAmount, address recipient, address router, uint256 minAmountOut)[] swapDetails) external payable",
     "function swapPredefinedTokens(uint256 ethAmountToken1, uint256 ethAmountToken2, uint256 minAmountOutToken1, uint256 minAmountOutToken2, address recipient, address router) external payable",
     "function swapEqualAmounts(uint256 ethAmountEach, uint256 minAmountOutToken1, uint256 minAmountOutToken2, address recipient, address router) external payable"
@@ -1173,6 +1181,256 @@ async function executeMultiSwap(index, wallets, tokens = null) {
     }
 }
 
+async function executeMultiSwapV3(index, wallets, tokens = null) {
+    try {
+        if (index >= wallets.length) {
+            console.log(`Index ${index} exceeds wallet array length`);
+            return { success: false, reason: 'index_out_of_bounds' };
+        }
+
+        const signer = new ethers.Wallet(wallets[index][1], provider);
+        console.log(`Wallet ${index}: ${signer.address}`);
+
+        // Check wallet balance first
+        const currentBalance = await provider.getBalance(signer.address);
+        const minBalance = ethers.utils.parseUnits("0.0000001", 18); // 0.0000001 ETH minimum
+        
+        if (currentBalance.lt(minBalance)) {
+            console.log(`Insufficient balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+            return { success: false, reason: 'insufficient_funds' };
+        }
+        
+        console.log(`Wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+        
+        // Get gas max limit from config
+        const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+            config.gasSettings.gasMax : 
+            config.gasSettings.gasMax.toString();
+        const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+        
+        // MulticallSwapV3 contract (V3 ONLY)
+        const multicallAddress = contracts.multicallSwapV3;
+        const multicallContract = new ethers.Contract(multicallAddress, multicallAbi, signer);
+        
+        // Define the V3 token addresses you want to swap
+        const tokensToSwap = tokens || defaultTokens["V3"] || [
+            "0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9", //BONK
+        ];
+
+        const numberOfTokens = tokensToSwap.length;
+        console.log(`Number of V3 tokens to swap: ${numberOfTokens}`);
+        console.log(`V3 Tokens: ${tokensToSwap.slice(0, 3).join(', ')}${tokensToSwap.length > 3 ? '...' : ''}`);
+        
+        // Reserve ETH for gas costs
+        const gasReserve = ethers.utils.parseUnits("0.000004", 18);
+        const availableForSwap = currentBalance.sub(gasReserve);
+        
+        if (availableForSwap.lte(0)) {
+            console.log(`Insufficient balance for swap after gas reserve. Balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH, Gas reserve: ${ethers.utils.formatUnits(gasReserve, 18)} ETH`);
+            return { success: false, reason: 'insufficient_funds' };
+        }
+        
+        // Use 10 wei per token
+        let amountPerToken = ethers.BigNumber.from("10");
+        let totalSwapAmount = amountPerToken.mul(numberOfTokens);
+
+        // V3 fee tiers (in basis points: 500 = 0.05%, 3000 = 0.3%, 10000 = 1%)
+        const defaultV3Fee = config.defaultV3Fee || 10000; // 1% fee tier as default
+        const v3Fee = Array.isArray(defaultV3Fee) ? defaultV3Fee[0] : defaultV3Fee;
+        
+        console.log(`Available for swap: ${ethers.utils.formatUnits(availableForSwap, 18)} ETH`);
+        console.log(`Amount per token: ${amountPerToken.toString()} wei (${ethers.utils.formatUnits(amountPerToken, 18)} ETH)`);
+        console.log(`Total swap amount: ${totalSwapAmount.toString()} wei (${ethers.utils.formatUnits(totalSwapAmount, 18)} ETH)`);
+        console.log(`V3 Fee tier: ${v3Fee} (${(v3Fee / 10000)}%)`);
+        
+        // Create V3 swap details for all tokens (matching SwapDetailsV3 struct)
+        let swapDetails = tokensToSwap.map(tokenAddress => ({
+            tokenAddress: tokenAddress,    // address tokenAddress
+            ethAmount: amountPerToken,     // uint256 ethAmount  
+            recipient: signer.address,     // address recipient
+            fee: v3Fee,                    // uint24 fee (V3 fee tier)
+            minAmountOut: 0                // uint256 minAmountOut (no slippage protection)
+        }));
+
+        console.log(swapDetails)
+
+        console.log(`Preparing V3 swap for ${amountPerToken.toString()} wei each of ${numberOfTokens} tokens...`);
+        console.log(`Using V3 fee tier: ${v3Fee} basis points`);
+        // return
+        // Enhanced gas price calculation
+        const baseGasPrice = await provider.getGasPrice();
+        console.log(`Base gas price: ${ethers.utils.formatUnits(baseGasPrice, 9)} Gwei`);
+        
+        // Force minimum gas price for Base network
+        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
+        let gasPrice = baseGasPrice.lt(minGasPrice) ? 
+            minGasPrice.mul(5) : baseGasPrice.mul(120).div(100); // 5x minimum or 20% boost
+        
+        console.log(`Using gas price: ${ethers.utils.formatUnits(gasPrice, 9)} Gwei`);
+        
+        // Estimate gas limit with fallback for V3 function
+        let gasLimit;
+        try {
+            gasLimit = await multicallContract.estimateGas.executeMultiSwapV3(swapDetails, {
+                value: totalSwapAmount,
+                from: signer.address
+            });
+            console.log(`Estimated gas limit: ${gasLimit.toString()}`);
+            
+            // Add 20% buffer to gas limit
+            gasLimit = gasLimit.mul(120).div(100);
+        } catch (gasError) {
+            console.log(`Gas estimation failed, using fallback: ${gasError.message}`);
+            // Fallback: V3 swaps typically need more gas than V2
+            gasLimit = ethers.BigNumber.from("400000").add(
+                ethers.BigNumber.from("80000").mul(Math.max(0, numberOfTokens - 1))
+            );
+        }
+        
+        // Calculate total gas cost
+        const totalGasCost = gasPrice.mul(gasLimit);
+        const totalGasCostETH = ethers.utils.formatUnits(totalGasCost, 18);
+        const totalTxCost = totalSwapAmount.add(totalGasCost);
+        
+        console.log(`Gas limit with buffer: ${gasLimit.toString()}`);
+        console.log(`Total gas cost: ${totalGasCostETH} ETH`);
+        console.log(`Gas max limit: ${gasMaxETH} ETH`);
+        console.log(`Total tx cost: ${ethers.utils.formatUnits(totalTxCost, 18)} ETH`);
+        
+        // Check gas cost against gasMax
+        if (totalGasCost.gt(gasMaxWei)) {
+            console.log(`❌ Gas cost ${totalGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
+            console.log(`⚠️  V3 Multi-swap cancelled to stay within gas limits`);
+            return { 
+                success: false, 
+                reason: 'gas_cost_exceeds_max',
+                gasRequested: totalGasCostETH,
+                gasMaxAllowed: gasMaxETH,
+                tokensCount: numberOfTokens
+            };
+        }
+        
+        // Verify we have enough balance for gas + swap amounts
+        if (currentBalance.lt(totalTxCost)) {
+            console.log(`Insufficient funds. Need ${ethers.utils.formatUnits(totalTxCost, 18)} ETH but have ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+            return { success: false, reason: 'insufficient_gas' };
+        }
+        
+        console.log(`✅ Gas cost within limits, proceeding with V3 multi-swap...`);
+        console.log(`V3 Contract: ${multicallAddress}`);
+        console.log(`V3 Router: ${contracts.uniswapRouterV3}`); // Get router from contract
+        
+        // Get nonce for swap transaction
+        const swapNonce = await signer.getTransactionCount("latest");
+        
+        // Execute the V3 multi-swap transaction (CORRECT FUNCTION CALL)
+        const swapTransaction = await multicallContract.executeMultiSwapV3(swapDetails, {
+            value: totalSwapAmount,
+            gasLimit,
+            gasPrice,
+            nonce: swapNonce,
+            type: 0 // Force legacy transaction type
+        });
+        
+        console.log(`V3 Multi-swap transaction sent: ${swapTransaction.hash}`);
+        
+        // Wait for confirmation with timeout
+        let receipt;
+        try {
+            // Wait up to 2 minutes for confirmation
+            receipt = await Promise.race([
+                swapTransaction.wait(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Transaction timeout")), 120000)
+                )
+            ]);
+        } catch (waitError) {
+            console.error(`Transaction wait failed: ${waitError.message}`);
+            
+            // Try to get receipt manually after waiting
+            await sleep(3000);
+            try {
+                receipt = await provider.getTransactionReceipt(swapTransaction.hash);
+                if (!receipt) {
+                    throw new Error("Transaction not found");
+                }
+            } catch (receiptError) {
+                console.error(`Failed to get receipt: ${receiptError.message}`);
+                return { success: false, reason: 'receipt_error', txHash: swapTransaction.hash };
+            }
+        }
+        
+        if (receipt && receipt.status === 1) {
+            const actualGasCost = gasPrice.mul(receipt.gasUsed);
+            const actualGasCostETH = ethers.utils.formatUnits(actualGasCost, 18);
+            const gasEfficiency = ((receipt.gasUsed.toNumber() / gasLimit.toNumber()) * 100).toFixed(1);
+            
+            console.log(`✅ V3 Multi-swap successful: ${receipt.transactionHash}`);
+            console.log(`⛽ Gas used: ${receipt.gasUsed.toString()} (estimated: ${gasLimit.toString()})`);
+            console.log(`💰 Actual gas cost: ${actualGasCostETH} ETH (estimated: ${totalGasCostETH} ETH)`);
+            console.log(`📊 Gas efficiency: ${gasEfficiency}%`);
+            console.log(`🎯 V3 Tokens swapped: ${numberOfTokens}`);
+            console.log(`💎 V3 Fee tier used: ${v3Fee} basis points`);
+            
+            return { 
+                success: true, 
+                txHash: receipt.transactionHash,
+                gasUsed: receipt.gasUsed.toString(),
+                gasEstimated: gasLimit.toString(),
+                actualGasCost: actualGasCostETH,
+                estimatedGasCost: totalGasCostETH,
+                gasEfficiency,
+                tokensSwapped: numberOfTokens,
+                walletIndex: index,
+                walletAddress: signer.address,
+                swapType: 'V3',
+                feeTier: v3Fee
+            };
+        } else {
+            console.log(`❌ V3 Multi-swap failed: ${receipt?.transactionHash || swapTransaction.hash}`);
+            return { 
+                success: false, 
+                reason: 'transaction_failed', 
+                txHash: receipt?.transactionHash || swapTransaction.hash 
+            };
+        }
+        
+    } catch (err) {
+        console.error(`V3 Error for wallet ${index}:`, err.message);
+        
+        // Handle specific error types
+        if (err.code === 'INSUFFICIENT_FUNDS' || err.message.includes('insufficient funds')) {
+            console.log(`No funds in wallet ${index}`);
+            return { success: false, reason: 'insufficient_funds' };
+        } else if (err.code === 'NONCE_EXPIRED' || err.code === 'NONCE_TOO_LOW' || err.message.includes('nonce too low')) {
+            console.log(`Nonce issue in wallet ${index}`);
+            return { success: false, reason: 'nonce_error' };
+        } else if (err.code === 'REPLACEMENT_UNDERPRICED') {
+            console.log(`Gas price too low for wallet ${index}`);
+            return { success: false, reason: 'gas_price_low' };
+        } else if (err.message.includes('gas')) {
+            console.log(`Gas related error for wallet ${index}:`, err.message);
+            return { success: false, reason: 'gas_error' };
+        } else if (err.message.includes('INVALID_ARGUMENT')) {
+            console.log(`ABI parsing error for wallet ${index}:`, err.message);
+            return { success: false, reason: 'abi_error' };
+        } else if (err.message.includes('insufficient liquidity') || err.message.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
+            console.log(`Insufficient liquidity for V3 swap in wallet ${index}`);
+            return { success: false, reason: 'insufficient_liquidity' };
+        } else if (err.message.includes('execution reverted')) {
+            console.log(`V3 Contract execution reverted for wallet ${index}:`, err.message);
+            return { success: false, reason: 'execution_reverted' };
+        } else if (err.message.includes('STF') || err.message.includes('FullMath')) {
+            console.log(`V3 math overflow/underflow for wallet ${index}`);
+            return { success: false, reason: 'v3_math_error' };
+        }
+        
+        // Only throw truly unexpected errors
+        console.error(`Unexpected V3 error in wallet ${index}:`, err.message);
+        return { success: false, reason: 'unknown_error', error: err.message };
+    }
+}
+
 async function executeV3Swap(index, wallets, tokenAddress) {
     try {
         if (index >= wallets.length) {
@@ -1381,8 +1639,6 @@ async function executeV3Swap(index, wallets, tokenAddress) {
         return { success: false, reason: 'unknown_error', error: err.message };
     }
 }
-
-
 
 async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount = null, delayBetweenChunks = 3000) {
     log(`Starting airdrop batch processing with enhanced controls:`);
@@ -1692,7 +1948,7 @@ async function swapBatch(batchSize = config.defaultBatchSize, tokenAddress, dela
             }
             
             batchPromises.push(
-                executeSwapWithGasCheck(i, wallets, tokenAddress, gasMaxWei, gasMaxETH)
+                executeSwap(i, wallets, tokenAddress, gasMaxWei, gasMaxETH)
                     .then(result => {
                         totalProcessed++;
                         if (result && result.success) {
@@ -1969,7 +2225,7 @@ async function v3SwapBatch(batchSize = config.defaultBatchSize, tokenAddress, st
             }
             
             batchPromises.push(
-                executeV3SwapWithGasCheck(i, wallets, tokenAddress, gasMaxWei, gasMaxETH)
+                executeV3Swap(i, wallets, tokenAddress, gasMaxWei, gasMaxETH)
                     .then((result) => {
                         totalProcessed++;
                         if (result.success) {
@@ -2381,6 +2637,357 @@ async function createWalletAndMultiSmall(multiTokens, cycleDelay = 2000, funding
         
         // Continue the loop even if there was an error
         return createWalletAndMultiSmall(multiTokens, cycleDelay, fundingAmount);
+    }
+}
+
+async function createWalletAndMultiSmallV3(multiTokens, cycleDelay = 2000, fundingAmount = "0.00001") {
+    let connectedNewWallet = null;
+    let mainSigner = null;
+    const newWallet = ethers.Wallet.createRandom();
+    var pk = config.fundingPrivateKey
+
+    console.log(`Starting createWalletAndMultiSmallV3 cycle...`);
+    console.log(`Funding amount: ${fundingAmount} ETH`);
+    console.log(`Cycle delay: ${cycleDelay}ms`);
+    console.log(`Using V3 swaps only`);
+    
+    // Get gas max limit from config
+    const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+        config.gasSettings.gasMax : 
+        config.gasSettings.gasMax.toString();
+    const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+    console.log(`Gas max limit: ${gasMaxETH} ETH`);
+
+    try {
+        mainSigner = new ethers.Wallet(config.fundingPrivateKey, provider);
+        console.log("Main wallet:", mainSigner.address);
+
+        // Step 1: Create a random new wallet
+        connectedNewWallet = newWallet.connect(provider);
+        
+        console.log(`Created new V3 wallet: ${newWallet.address} ${newWallet.privateKey}`);
+
+        savePrivateKey([
+            newWallet.address,
+            newWallet.privateKey
+        ])
+        
+        // Step 2: Fund the new wallet from main signer
+        const fundingAmountWei = ethers.utils.parseUnits(fundingAmount, 18);
+        
+        // Check main signer balance
+        const mainBalance = await provider.getBalance(mainSigner.address);
+        if (mainBalance.lt(fundingAmountWei)) {
+            throw new Error(`Insufficient balance in main wallet. Need ${fundingAmount} ETH, have ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
+        }
+        
+        console.log(`Funding new V3 wallet with ${fundingAmount} ETH...`);
+        
+        // Prepare funding transaction
+        const fundingTx = {
+            to: newWallet.address,
+            value: fundingAmountWei
+        };
+        
+        // Get gas estimates with fallback
+        let fundingGasLimit, fundingGasPrice;
+        try {
+            // Try to use getGasEstimates if it exists
+            if (typeof getGasEstimates === 'function') {
+                const gasEstimates = await getGasEstimates(fundingTx, { provider: mainSigner });
+                fundingGasLimit = gasEstimates.gasLimit;
+                fundingGasPrice = gasEstimates.gasPrice;
+            } else {
+                throw new Error("getGasEstimates not available");
+            }
+        } catch (gasError) {
+            console.log("Using fallback gas estimation for V3 funding");
+            const baseGasPrice = await provider.getGasPrice();
+            fundingGasPrice = baseGasPrice.mul(120).div(100); // 20% boost
+            fundingGasLimit = 21000;
+        }
+        
+        // Check funding transaction gas cost against gasMax
+        const fundingGasCost = fundingGasPrice.mul(fundingGasLimit);
+        const fundingGasCostETH = ethers.utils.formatUnits(fundingGasCost, 18);
+        
+        console.log(`V3 Funding gas cost: ${fundingGasCostETH} ETH`);
+        
+        if (fundingGasCost.gt(gasMaxWei)) {
+            console.log(`❌ V3 Funding gas cost ${fundingGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
+            console.log(`⚠️  Skipping this V3 cycle due to high gas costs`);
+            
+            // Wait and retry
+            console.log(`🔄 Waiting ${cycleDelay}ms before retrying V3...`);
+            await sleep(cycleDelay);
+            return createWalletAndMultiSmallV3(multiTokens, cycleDelay, fundingAmount);
+        }
+        
+        // Get nonce with fallback
+        let fundingNonce;
+        try {
+            if (typeof getNonce === 'function') {
+                fundingNonce = await getNonce(mainSigner, { provider });
+            } else {
+                fundingNonce = await mainSigner.getTransactionCount("pending");
+            }
+        } catch (nonceError) {
+            fundingNonce = await mainSigner.getTransactionCount("pending");
+        }
+        
+        console.log(`✅ V3 Funding gas cost within limits, proceeding...`);
+        console.log(`V3 Funding gas price: ${ethers.utils.formatUnits(fundingGasPrice, 9)} Gwei`);
+        
+        // Send funding transaction
+        const fundingTransaction = await mainSigner.sendTransaction({
+            ...fundingTx,
+            gasLimit: fundingGasLimit,
+            gasPrice: fundingGasPrice,
+            nonce: fundingNonce
+        });
+        
+        console.log(`V3 Funding transaction sent: ${fundingTransaction.hash}`);
+        const fundingReceipt = await fundingTransaction.wait();
+        
+        // Log actual funding gas usage
+        const actualFundingGasCost = fundingGasPrice.mul(fundingReceipt.gasUsed);
+        const actualFundingGasCostETH = ethers.utils.formatUnits(actualFundingGasCost, 18);
+        console.log(`✅ V3 Funding successful - Actual gas cost: ${actualFundingGasCostETH} ETH`);
+        
+        // Verify funding
+        const newWalletBalance = await provider.getBalance(connectedNewWallet.address);
+        console.log(`New V3 wallet balance: ${ethers.utils.formatUnits(newWalletBalance, 18)} ETH`);
+        
+        // Step 3: Execute V3 swap using the new wallet with your custom V3 contract
+        console.log(`Executing V3 multi-swap from new wallet...`);
+
+        // Initialize your custom V3 contract with the NEW WALLET
+        const multicallV3Contract = new ethers.Contract(contracts.multicallSwapV3, multicallAbi, connectedNewWallet);
+        
+        // Define the V3 token addresses you want to swap
+        const tokensToSwap = multiTokens || defaultTokens["V3"] || [
+            "0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9", //BONK
+        ];
+        
+        const numberOfTokens = tokensToSwap.length;
+        console.log(`Number of V3 tokens to swap: ${numberOfTokens}`);
+        console.log(`V3 Tokens: ${tokensToSwap.slice(0, 3).join(', ')}${tokensToSwap.length > 3 ? '...' : ''}`);
+        
+        // Calculate available balance for swapping (reserve gas)
+        let currentBalance = await provider.getBalance(connectedNewWallet.address);
+        console.log(`Current V3 wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+
+        await new Promise(async (resolve, reject) => {
+            let indexETH = 0;
+            try {
+                while(currentBalance.eq(0) && indexETH < 100){
+                    console.log('Waiting for V3 ETH balance to update...');
+                    await sleep(1000);
+                    currentBalance = await provider.getBalance(connectedNewWallet.address);
+                    indexETH++;
+                }
+                
+                if(currentBalance.gt(0)){
+                    console.log('V3 Balance loaded, proceeding with swaps...');
+                    resolve()
+                }
+            } catch(err) {
+                console.warn('V3 Error', err?.message);
+                await sendETHBack(connectedNewWallet.privateKey, mainSigner.address)
+                reject(err);
+            }
+        })
+
+        // Reserve ETH for gas costs (V3 needs slightly more gas)
+        const gasReserve = ethers.utils.parseUnits("0.000003", 18); // Slightly higher for V3
+        const availableForSwap = currentBalance.sub(gasReserve);
+        
+        if (availableForSwap.lte(0)) {
+            throw new Error(`Insufficient balance for V3 swap after gas reserve. Balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH, Gas reserve: ${ethers.utils.formatUnits(gasReserve, 18)} ETH`);
+        }
+        
+        // Split available amount equally between all tokens - USE 10 WEI PER TOKEN
+        let amountPerToken = ethers.BigNumber.from("10"); // 10 wei per token
+        let totalSwapAmount = amountPerToken.mul(numberOfTokens);
+        
+        // V3 fee tiers (in basis points: 500 = 0.05%, 3000 = 0.3%, 10000 = 1%)
+        const defaultV3Fee = config.defaultV3Fee || 10000; // 1% fee tier as default
+        const v3Fee = Array.isArray(defaultV3Fee) ? defaultV3Fee[0] : defaultV3Fee;
+        
+        console.log(`Available for V3 swap: ${ethers.utils.formatUnits(availableForSwap, 18)} ETH`);
+        console.log(`Amount per V3 token: ${amountPerToken.toString()} wei (${ethers.utils.formatUnits(amountPerToken, 18)} ETH)`);
+        console.log(`Total V3 swap amount: ${totalSwapAmount.toString()} wei (${ethers.utils.formatUnits(totalSwapAmount, 18)} ETH)`);
+        console.log(`V3 Fee tier: ${v3Fee} (${(v3Fee / 10000)}%)`);
+        
+        // Create V3 swap details for all tokens (matching SwapDetailsV3 struct)
+        let swapDetails = tokensToSwap.map(tokenAddress => ({
+            tokenAddress: tokenAddress,    // address tokenAddress
+            ethAmount: amountPerToken,     // uint256 ethAmount  
+            recipient: connectedNewWallet.address, // address recipient
+            fee: v3Fee,                    // uint24 fee (V3 fee tier)
+            minAmountOut: 0                // uint256 minAmountOut (no slippage protection)
+        }));
+
+        console.log(`Swapping ${amountPerToken.toString()} wei for each of ${numberOfTokens} V3 tokens...`);
+        console.log(`Using V3 fee tier: ${v3Fee} basis points`);
+        
+        // Get gas price and estimate more conservatively for V3
+        const currentGasPrice = await provider.getGasPrice();
+        console.log(`Current V3 gas price: ${ethers.utils.formatUnits(currentGasPrice, 9)} Gwei`);
+        
+        // Enhanced gas price calculation (same as other functions)
+        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
+        let adjustedGasPrice = currentGasPrice.lt(minGasPrice) ? 
+            minGasPrice.mul(5) : currentGasPrice.mul(120).div(100); // 5x minimum or 20% boost
+        
+        console.log(`Using adjusted V3 gas price: ${ethers.utils.formatUnits(adjustedGasPrice, 9)} Gwei`);
+        
+        // Use a more reasonable gas limit for V3 (typically higher than V2)
+        let estimatedGasLimit;
+        try {
+            estimatedGasLimit = await multicallV3Contract.estimateGas.executeMultiSwapV3(swapDetails, {
+                value: totalSwapAmount,
+                from: connectedNewWallet.address
+            });
+            console.log(`Estimated V3 gas limit: ${estimatedGasLimit.toString()}`);
+            
+            // Add 20% buffer to gas limit
+            estimatedGasLimit = estimatedGasLimit.mul(120).div(100);
+        } catch (gasError) {
+            console.log("V3 Gas estimation failed, using conservative fallback");
+            // V3 swaps typically need more gas than V2
+            estimatedGasLimit = ethers.BigNumber.from("400000").add(
+                ethers.BigNumber.from("80000").mul(Math.max(0, numberOfTokens - 1))
+            );
+        }
+        
+        // Calculate total transaction cost
+        const totalGasCost = adjustedGasPrice.mul(estimatedGasLimit);
+        const totalTxCost = totalSwapAmount.add(totalGasCost);
+        const totalGasCostETH = ethers.utils.formatUnits(totalGasCost, 18);
+        
+        console.log(`V3 Gas limit with buffer: ${estimatedGasLimit.toString()}`);
+        console.log(`Total V3 gas cost: ${totalGasCostETH} ETH`);
+        console.log(`Total V3 tx cost: ${ethers.utils.formatUnits(totalTxCost, 18)} ETH`);
+        console.log(`V3 Wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+        
+        // Check swap gas cost against gasMax
+        if (totalGasCost.gt(gasMaxWei)) {
+            console.log(`❌ V3 Swap gas cost ${totalGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
+            console.log(`⚠️  Skipping V3 swap but recovering ETH`);
+            
+            // Skip swap but continue to ETH recovery
+            await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
+            
+            console.log(`🔄 Waiting ${cycleDelay}ms before retrying V3...`);
+            await sleep(cycleDelay);
+            return createWalletAndMultiSmallV3(multiTokens, cycleDelay, fundingAmount);
+        }
+        
+        // Verify we have enough balance
+        if (currentBalance.lt(totalTxCost)) {
+            // Even with 10 wei per token, check if we have enough for gas
+            if (currentBalance.lt(totalGasCost.add(totalSwapAmount))) {
+                throw new Error(`Insufficient funds for V3. Need ${ethers.utils.formatUnits(totalTxCost, 18)} ETH but have ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+            }
+            
+            console.log(`Warning: Very tight on funds but should work with 10 wei per V3 token`);
+        }
+        
+        console.log(`✅ V3 Swap gas cost within limits, proceeding...`);
+        
+        // Get nonce for swap transaction
+        const swapNonce = await connectedNewWallet.getTransactionCount("pending");
+        
+        // Execute the V3 multi-swap transaction (CORRECT FUNCTION CALL)
+        const swapTransaction = await multicallV3Contract.executeMultiSwapV3(swapDetails, {
+            value: totalSwapAmount,
+            gasLimit: estimatedGasLimit,
+            gasPrice: adjustedGasPrice,
+            nonce: swapNonce
+        });
+        
+        console.log(`V3 Swap transaction sent: ${swapTransaction.hash}`);
+        
+        // Wait for the swap transaction to be mined
+        const swapReceipt = await swapTransaction.wait();
+        
+        let swapSuccess = false;
+        if (swapReceipt && swapReceipt.status === 1) {
+            const actualSwapGasCost = adjustedGasPrice.mul(swapReceipt.gasUsed);
+            const actualSwapGasCostETH = ethers.utils.formatUnits(actualSwapGasCost, 18);
+            const swapGasEfficiency = ((swapReceipt.gasUsed.toNumber() / estimatedGasLimit.toNumber()) * 100).toFixed(1);
+            
+            console.log(`✅ V3 Multi-swap successful: ${swapReceipt.transactionHash}`);
+            console.log(`⛽ Gas used: ${swapReceipt.gasUsed.toString()} (estimated: ${estimatedGasLimit.toString()})`);
+            console.log(`💰 Actual gas cost: ${actualSwapGasCostETH} ETH (estimated: ${totalGasCostETH} ETH)`);
+            console.log(`📊 Gas efficiency: ${swapGasEfficiency}%`);
+            console.log(`🎯 Swapped ${numberOfTokens} V3 tokens successfully`);
+            console.log(`💎 V3 Fee tier used: ${v3Fee} basis points`);
+            swapSuccess = true;
+        } else {
+            console.log(`❌ V3 Multi-swap failed: ${swapReceipt?.transactionHash || swapTransaction.hash}`);
+        }
+        
+        // Step 4: Send remaining ETH back to main wallet
+        console.log(`Transferring remaining ETH back to main wallet from V3 wallet...`);
+        
+        // Wait for balance to update
+        await sleep(1000);
+        
+        // Send ETH back to main wallet
+        await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
+        
+        // Final balances
+        const finalMainBalance = await provider.getBalance(mainSigner.address);
+        const finalNewWalletBalance = await provider.getBalance(connectedNewWallet.address);
+        
+        console.log(`Final main wallet balance: ${ethers.utils.formatUnits(finalMainBalance, 18)} ETH`);
+        console.log(`Final V3 wallet balance: ${ethers.utils.formatUnits(finalNewWalletBalance, 18)} ETH`);
+        
+        const result = {
+            success: swapSuccess,
+            swapType: 'V3',
+            feeTier: v3Fee,
+            newWalletAddress: newWallet.address,
+            newWalletPrivateKey: newWallet.privateKey,
+            swapTxHash: swapReceipt?.transactionHash || swapTransaction.hash,
+            fundingTxHash: fundingTransaction.hash,
+            actualFundingGasCost: actualFundingGasCostETH,
+            actualSwapGasCost: swapSuccess ? ethers.utils.formatUnits(adjustedGasPrice.mul(swapReceipt.gasUsed), 18) : '0',
+            tokensSwapped: numberOfTokens
+        };
+        
+        console.log('V3 Result:', result);
+        console.log(`🔄 V3 Cycle completed. Starting next V3 cycle in ${cycleDelay}ms...`);
+        
+        // Configurable delay before next cycle
+        await sleep(cycleDelay);
+        
+        // Recursively call the function to continue the V3 loop
+        return createWalletAndMultiSmallV3(multiTokens, cycleDelay, fundingAmount);
+        
+    } catch (err) {
+        console.error(`Error in createWalletAndMultiSmallV3:`, err.message);
+        console.log(`🔄 V3 Error occurred. Attempting to recover ETH...`);
+        
+        // Try to send ETH back to main wallet even if there was an error
+        if (provider && mainSigner && newWallet) {
+            try {
+                await sendETHBack(newWallet.privateKey, mainSigner.address);
+                console.log(`✅ ETH successfully recovered after V3 error`);
+            } catch (recoveryError) {
+                console.error(`❌ Failed to recover ETH after V3 error:`, recoveryError.message);
+            }
+        }
+        
+        console.log(`🔄 Retrying V3 in ${Math.max(cycleDelay, 5000)}ms...`);
+        
+        // Wait before retrying (use longer delay on error)
+        await sleep(Math.max(cycleDelay, 5000));
+        
+        // Continue the V3 loop even if there was an error
+        return createWalletAndMultiSmallV3(multiTokens, cycleDelay, fundingAmount);
     }
 }
 
@@ -3535,9 +4142,10 @@ async function volumeBotV3(index = 0, wallets = [], contractAddress) {
 }
 
 // Help function
+// Help function
 function showHelp() {
     console.log(`
-🚀 TurboBot - Enhanced DeFi Automation Tool with Gas Management & Timing Controls
+🚀 TurboBot - Enhanced DeFi Automation Tool with Gas Management & V3 Support
 
 WALLET MANAGEMENT:
   create [count]                     - Create new wallets (default: ${config.defaultWalletCount})
@@ -3560,6 +4168,7 @@ CONTRACT DEPLOYMENT & MANAGEMENT:
   volumeV3 [start] [end] [token] [delay_tx] [delay_cycles] [delay_error]
                                      - Enhanced V3 volume bot with advanced controls
                                      - Same features as volumeV2 but for V3 swaps
+                                     - Uses executeV3Swap() function for V3 pools
 
 ⚡ ENHANCED BATCH OPERATIONS:
   airdrop-batch [chunk_size] [total_eth] [delay_chunks]
@@ -3572,26 +4181,32 @@ CONTRACT DEPLOYMENT & MANAGEMENT:
                                      - Gas enforcement and detailed progress tracking
 
   multiswap-batch [batch_size] [tokens] [delay_batches] [delay_tx]
-                                     - Multi-token swaps with enhanced controls
+                                     - Multi-token V2 swaps with enhanced controls
                                      - Dynamic gas estimation and efficiency reporting
 
-  swapv3-batch [batch_size] [token] [delay_batches] [delay_tx]
+  swapv3-batch [batch_size] [token] [start] [end] [delay_batches] [delay_tx]
                                      - V3 swaps with comprehensive gas management
+                                     - Uses V3 fee tiers and optimized routing
 
 🎯 ENHANCED INDIVIDUAL OPERATIONS:
   airdrop [start] [end] [total_eth]  - Send airdrops to wallet range with gas checks
-  swap [start] [end] [token]         - Single token swap with gas management
-  multiswap [start] [end] [tokens]   - Multi-token swap with enhanced controls
-  swapv3 [start] [end] [token]       - V3 swap with gas enforcement
+  swap [start] [end] [token]         - Single token V2 swap with gas management
+  multiswap [start] [end] [tokens]   - Multi-token V2 swap with enhanced controls
+  multiswapV3 [start] [end] [tokens] - Multi-token V3 swap with V3 fee tiers
+  swapv3 [start] [end] [token]       - V3 swap with gas enforcement and fee optimization
 
 🔄 ENHANCED CONTINUOUS AUTOMATION:
   create-and-swap [tokens] [cycle_delay] [funding_amount]
-                                     - Infinite: Create → Fund → Multi-swap → Recover
+                                     - Infinite: Create → Fund → Multi-swap V2 → Recover
                                      - Enhanced gas management and timing controls
 
   create-and-swapv3 [token] [cycle_delay] [funding_amount]
-                                     - Infinite: Create → Fund → V3 swap → Recover
+                                     - Infinite: Create → Fund → Single V3 swap → Recover
                                      - Gas cost validation before all transactions
+
+  create-and-multiswapv3 [tokens] [cycle_delay] [funding_amount]
+                                     - Infinite: Create → Fund → Multi V3 swap → Recover
+                                     - Uses V3 multicall contract for multiple tokens
 
 ⚙️ GAS MANAGEMENT & TIMING CONTROLS:
 
@@ -3599,6 +4214,12 @@ CONTRACT DEPLOYMENT & MANAGEMENT:
   • All functions now respect GAS_MAX setting from .env
   • Transactions are skipped if gas cost exceeds limit
   • Detailed gas cost reporting and efficiency metrics
+
+  V3 Specific Features:
+  • V3 fee tier selection (500, 3000, 10000 basis points)
+  • Optimized gas estimation for V3 swaps
+  • V3 router integration with automatic ETH→WETH handling
+  • Enhanced slippage protection for V3 pools
 
   Timing Parameters (all in milliseconds):
   • delay_tx: Time between individual transactions (default: 50-150ms)
@@ -3610,6 +4231,7 @@ CONTRACT DEPLOYMENT & MANAGEMENT:
   • Real-time gas cost calculations and comparisons
   • Gas efficiency percentages for completed transactions
   • Success rates and detailed progress tracking
+  • V3-specific metrics (fee tiers, routing info)
   • Clear indicators when transactions are skipped
 
 TOKEN FORMAT:
@@ -3629,52 +4251,55 @@ DEFAULT TOKENS V3:
 📚 ENHANCED EXAMPLES:
 
 🔥 Volume Generation with Custom Timing:
-  # Fast volume generation (50ms between tx, 1s between cycles)
+  # Fast V2 volume generation (50ms between tx, 1s between cycles)
   node script.js volumeV2 0 100 0xTokenAddr 50 1000 500
 
-  # Conservative volume generation (500ms between tx, 10s between cycles)  
-  node script.js volumeV2 0 500 0xTokenAddr 500 10000 2000
+  # Fast V3 volume generation (100ms between tx, 2s between cycles)
+  node script.js volumeV3 0 100 0xV3TokenAddr 100 2000 1000
 
-  # Default timing (use built-in defaults)
-  node script.js volumeV2 0 300 0xTokenAddr
+  # Conservative V3 volume generation (500ms between tx, 10s between cycles)  
+  node script.js volumeV3 0 500 0xV3TokenAddr 500 10000 2000
 
-⚡ Batch Operations with Timing:
-  # Fast batch processing
-  node script.js swap-batch 50 0xTokenAddr 1000 50
+⚡ Batch Operations with V3 Support:
+  # V2 multi-token swaps
+  node script.js multiswap-batch 50 "token1,token2" 1000 50
 
-  # Conservative batch processing  
-  node script.js multiswap-batch 25 "token1,token2" 5000 200
+  # V3 single token swaps with range
+  node script.js swapv3-batch 25 0xV3Token 0 500 2000 100
 
-  # Airdrop with custom chunk delay
-  node script.js airdrop-batch 100 2.0 3000
+  # V3 multi-token swaps
+  node script.js multiswapV3 0 100 "v3token1,v3token2"
 
-🔄 Continuous Automation with Custom Settings:
-  # Fast cycle automation (2s between cycles, 0.000003 ETH funding)
-  node script.js create-and-swapv3 0xTokenAddr 2000 0.000003
+🔄 Continuous Automation with V3:
+  # V2 multi-token automation (2s cycles, 0.000003 ETH funding)
+  node script.js create-and-swap "token1,token2" 2000 0.000003
 
-  # Conservative automation (10s between cycles, 0.00001 ETH funding)
-  node script.js create-and-swap "token1,token2" 10000 0.00001
+  # V3 single token automation (3s cycles, 0.000005 ETH funding)
+  node script.js create-and-swapv3 0xV3Token 3000 0.000005
 
-📊 Gas Management Examples:
-  # Set gas limit in .env file
-  GAS_MAX=0.0000008  # Maximum 0.0000008 ETH per transaction
+  # V3 multi-token automation (NEW - uses V3 multicall)
+  node script.js create-and-multiswapv3 "v3token1,v3token2" 3000 0.000005
 
-  # Monitor gas costs during high network activity
-  node script.js volumeV2 0 100 0xTokenAddr 200 5000 3000
+📊 V3-Specific Examples:
+  # V3 swap with different fee tiers (configured in contract)
+  node script.js swapv3 0 100 0xV3Token
 
-  # Batch processing during peak hours (longer delays)
-  node script.js swap-batch 25 0xTokenAddr 10000 500
+  # V3 volume generation with V3-optimized timing
+  node script.js volumeV3 0 200 0xV3Token 150 3000 1500
 
-🚀 MULTI-INSTANCE EXAMPLES:
-  # Different gas limits for different instances
-  GAS_MAX=0.0000005 PK_MAIN=wallet1 node script.js volumeV2 0 250 0xToken1 100 2000
-  GAS_MAX=0.000001  PK_MAIN=wallet2 node script.js volumeV3 250 500 0xToken2 150 3000
+  # V3 multi-swap batch processing
+  node script.js multiswapV3 0 500 "v3token1,v3token2,v3token3"
 
-  # Staggered timing to avoid network congestion
-  node script.js volumeV2 0 200 0xToken1 100 2000 &
-  sleep 30 && node script.js volumeV2 200 400 0xToken2 150 2500 &
+🚀 MULTI-INSTANCE V2/V3 MIXED EXAMPLES:
+  # Run V2 and V3 volume bots simultaneously
+  GAS_MAX=0.0000005 node script.js volumeV2 0 250 0xV2Token 100 2000 &
+  GAS_MAX=0.0000008 node script.js volumeV3 250 500 0xV3Token 150 2500 &
 
-⚙️ CONFIGURATION (Enhanced):
+  # Staggered V2/V3 automation
+  node script.js create-and-swap "v2token1,v2token2" 2000 0.000003 &
+  sleep 60 && node script.js create-and-multiswapv3 "v3token1,v3token2" 3000 0.000005 &
+
+⚙️ CONFIGURATION (Enhanced with V3):
 
   Required .env variables:
   RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
@@ -3684,55 +4309,71 @@ DEFAULT TOKENS V3:
   DEFAULT_WALLET_COUNT=${config.defaultWalletCount}
   DEFAULT_CHUNK_SIZE=${config.defaultChunkSize}
   DEFAULT_BATCH_SIZE=${config.defaultBatchSize}
-  GAS_MAX=0.0000008                  # Maximum gas cost per transaction (ETH)
-  GAS_PRICE_GWEI=1.5                # Force specific gas price (optional)
-  GAS_LIMIT=300000                   # Force specific gas limit (optional)
+  DEFAULT_V3_FEE=${config.defaultV3Fee}        # V3 fee tier (500, 3000, 10000)
+  GAS_MAX=0.0000008                           # Maximum gas cost per transaction (ETH)
+  GAS_PRICE_GWEI=1.5                         # Force specific gas price (optional)
+  GAS_LIMIT=300000                           # Force specific gas limit (optional)
 
-🎯 GAS OPTIMIZATION STRATEGIES:
+🎯 V3 OPTIMIZATION STRATEGIES:
 
-  Low Gas Times:
-  • Use faster timing: delay_tx=50, delay_cycles=1000
-  • Higher batch sizes: 50-100 wallets per batch
-  • More aggressive gas settings
+  V3 Fee Tier Selection:
+  • 500 basis points (0.05%): Stable pairs (USDC/WETH)
+  • 3000 basis points (0.3%): Standard pairs (most tokens)
+  • 10000 basis points (1%): Exotic pairs (new/volatile tokens)
 
-  High Gas Times:  
-  • Use slower timing: delay_tx=500, delay_cycles=10000
-  • Smaller batch sizes: 10-25 wallets per batch
-  • Let gas enforcement skip expensive transactions
+  V3 Gas Considerations:
+  • V3 swaps typically use 20-40% more gas than V2
+  • Set GAS_MAX accordingly for V3 operations
+  • V3 multicall operations are more gas-efficient than individual swaps
 
-  Continuous Monitoring:
-  • Watch gas efficiency percentages (target >80%)
-  • Monitor skip rates due to gas limits
-  • Adjust GAS_MAX based on network conditions
+  V3 Timing Recommendations:
+  • Use slightly higher delays for V3 operations (150ms vs 100ms)
+  • V3 cycle delays can be longer due to more complex routing
+  • Monitor V3 pool liquidity to avoid failed transactions
 
-📈 PERFORMANCE MONITORING:
+📈 PERFORMANCE MONITORING (V3 Enhanced):
+
+  V3-Specific Metrics:
+  • V3 fee tier efficiency tracking
+  • V3 vs V2 gas usage comparisons
+  • V3 routing success rates
+  • V3 multicall vs individual swap efficiency
 
   Enhanced Metrics Available:
-  • Gas efficiency percentages
-  • Success/failure/skipped transaction counts  
-  • Real-time gas cost calculations
-  • Batch processing speeds and success rates
-  • Cycle completion times and statistics
+  • Gas efficiency percentages (V2 vs V3)
+  • Success/failure/skipped transaction counts by swap type
+  • Real-time gas cost calculations for both V2 and V3
+  • V3 fee tier performance analytics
+  • Batch processing speeds with V3 support
 
 ⚠️  IMPORTANT NOTES:
-  • All functions now enforce GAS_MAX limits to control costs
-  • Transactions exceeding gas limits are automatically skipped
-  • Enhanced error handling prevents crashes during network issues
-  • Timing controls help manage network load and avoid rate limiting
-  • Monitor gas efficiency and adjust timing based on network conditions
+  • V3 operations require higher gas limits and reserves
+  • V3 multicall contract uses different ABI than V2
+  • All V3 functions enforce GAS_MAX limits with V3-specific calculations
+  • V3 swaps automatically handle ETH→WETH conversion
+  • Monitor V3 pool liquidity before large batch operations
+  • V3 fee tiers are configurable per deployment
   • Use Ctrl+C to stop infinite loops safely
 
-🆕 NEW FEATURES:
-  ✅ Gas cost enforcement across all functions
-  ✅ Configurable timing controls for all operations
-  ✅ Enhanced error handling and recovery
-  ✅ Real-time gas efficiency monitoring  
-  ✅ Detailed progress tracking and statistics
-  ✅ Automatic transaction skipping during high gas
-  ✅ Improved logging with gas cost breakdowns
+🆕 NEW V3 FEATURES:
+  ✅ Full Uniswap V3 integration with fee tier support
+  ✅ V3 multicall contract for efficient multi-token swaps
+  ✅ V3-specific gas estimation and optimization
+  ✅ Automatic ETH→WETH handling for V3 swaps
+  ✅ V3 fee tier configuration and monitoring
+  ✅ V3 vs V2 performance comparisons
+  ✅ Enhanced V3 error handling and recovery
+  ✅ V3 pool liquidity validation
+  ✅ V3-optimized timing and batch processing
 
 📚 For more detailed examples and advanced usage patterns, visit:
    https://github.com/tiagoterron/TurboBot
+
+🔗 Contract Addresses:
+   MulticallSwap V2: ${contracts.multicallSwap}
+   MulticallSwap V3: ${contracts.multicallSwapV3}
+   Uniswap V2 Router: ${contracts.uniswapRouter}
+   Uniswap V3 Router: ${contracts.uniswapRouterV3}
 `);
 }
 
@@ -3867,6 +4508,36 @@ async function main() {
                 log(`Multi-swap range completed: ${successCount} successful, ${failCount} failed`);
                 break;
 
+            case 'multiswapV3':
+                    wallets = loadWallets();
+                    if (wallets.length === 0) throw new Error('No wallets found');
+                    tokens = args[2] ? args[2].split(',') : defaultTokens["V3"];
+                    startAt = parseInt(args[0]) || 0;
+                    endAt = parseInt(args[1]) || wallets.length;
+    
+                    successCount = 0;
+                    failCount = 0;
+                    
+                    for (let i = startAt; i < Math.min(endAt, wallets.length); i++) {
+                        try {
+                            const result = await executeMultiSwapV3(i, wallets, tokens);
+                            if (result && result.success) {
+                                successCount++;
+                                log(`✅ Wallet ${i}: Success - ${result.tokensSwapped} tokens swapped`);
+                            } else {
+                                failCount++;
+                                log(`❌ Wallet ${i}: Failed - ${result.reason || 'unknown'}`);
+                            }
+                        } catch (err) {
+                            failCount++;
+                            log(`💥 Wallet ${i}: Error - ${err.message}`);
+                        }
+                        await sleep(100);
+                    }
+                    
+                    log(`Multi-swap range completed: ${successCount} successful, ${failCount} failed`);
+                    break;
+
             case 'create-and-swap':
                 tokenAddress = args[0] ? args[0].split(',') : defaultTokens["V2"];
                 var cycleDelay = parseInt(args[1]) || 2000;
@@ -3891,6 +4562,18 @@ async function main() {
                 }
                 break;
 
+            case 'create-and-multiswapv3':
+                tokens = args[0] ? args[0].split(',') : defaultTokens["V3"];
+                cycleDelay = parseInt(args[1]) || 3000;
+                fundingAmount = args[2] || "0.000005";
+                
+                try {
+                    await createWalletAndMultiSmallV3(tokens, cycleDelay, fundingAmount);
+                } catch (err) {
+                    console.log(err)
+                }
+                break;
+            
             case 'recoverETH':
                 mainWalletRecover = new ethers.Wallet(config.fundingPrivateKey)
                 let pk = args[0];
