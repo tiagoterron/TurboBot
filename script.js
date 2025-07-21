@@ -1823,7 +1823,7 @@ async function executeV3Swap(index, wallets, tokenAddress) {
         // Force minimum gas price for Base network
         const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
         let gasPrice = baseGasPrice.lt(minGasPrice) ? 
-            minGasPrice.mul(5) : baseGasPrice.mul(100).div(100); // 5x minimum or 20% boost
+            minGasPrice.mul(5) : baseGasPrice.mul(120).div(100); // 5x minimum or 20% boost
         
         console.log(`Using gas price: ${ethers.utils.formatUnits(gasPrice, 9)} Gwei`);
         
@@ -1838,7 +1838,7 @@ async function executeV3Swap(index, wallets, tokenAddress) {
             });
             
             // Add 20% buffer to gas limit
-            gasLimit = gasLimit.mul(100).div(100);
+            gasLimit = gasLimit.mul(120).div(100);
             console.log(`Estimated gas limit: ${gasLimit.toString()}`);
         } catch (gasError) {
             console.log(`Gas estimation failed, using fallback: ${gasError.message}`);

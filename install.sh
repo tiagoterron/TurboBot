@@ -324,16 +324,240 @@ install_dependencies() {
     fi
 }
 
-# Create .env file template
+# Function to validate private key format
+validate_private_key() {
+    local key=$1
+    # Remove 0x prefix if present
+    key=${key#0x}
+    
+    # Check if it's 64 hex characters
+    if [[ ${#key} -eq 64 ]] && [[ $key =~ ^[0-9a-fA-F]+$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to generate a new private key using Node.js
+generate_private_key() {
+    local temp_script=$(mktemp)
+    cat > "$temp_script" << 'EOF'
+const crypto = require('crypto');
+const privateKey = crypto.randomBytes(32).toString('hex');
+console.log(privateKey);
+EOF
+    
+    local generated_key=$(node "$temp_script")
+    rm "$temp_script"
+    echo "$generated_key"
+}
+
+# Function to get private key configuration
+configure_private_key() {
+    echo ""
+    echo -e "${BLUE}📋 Private Key Configuration${NC}"
+    echo "Choose how you want to configure your funding wallet:"
+    echo "1) Import existing private key"
+    echo "2) Generate new private key"
+    echo ""
+    
+    while true; do
+        read -p "Enter your choice (1-2): " pk_choice
+        
+        case $pk_choice in
+            1)
+                echo ""
+                log "🔑 Importing existing private key..."
+                echo -e "${YELLOW}⚠️  WARNING: Make sure you're in a secure environment!${NC}"
+                echo "Your private key will be stored in the .env file."
+                echo ""
+                
+                while true; do
+                    read -s -p "Enter your private key (without 0x prefix): " user_private_key
+                    echo ""
+                    
+                    if [[ -z "$user_private_key" ]]; then
+                        error_log "Private key cannot be empty. Please try again."
+                        continue
+                    fi
+                    
+                    if validate_private_key "$user_private_key"; then
+                        # Remove 0x prefix if present
+                        user_private_key=${user_private_key#0x}
+                        log "✅ Private key format is valid"
+                        echo "$user_private_key"
+                        return 0
+                    else
+                        error_log "Invalid private key format. Must be 64 hexadecimal characters."
+                        echo "Please try again or choose option 2 to generate a new key."
+                        echo ""
+                    fi
+                done
+                ;;
+            2)
+                log "🎲 Generating new private key..."
+                local generated_key=$(generate_private_key)
+                
+                if [[ -n "$generated_key" ]] && validate_private_key "$generated_key"; then
+                    echo ""
+                    echo -e "${GREEN}✅ Generated new private key:${NC}"
+                    echo -e "${YELLOW}$generated_key${NC}"
+                    echo ""
+                    echo -e "${RED}⚠️  IMPORTANT: Save this private key securely!${NC}"
+                    echo "This is the only time it will be displayed in plain text."
+                    echo "Make sure to:"
+                    echo "- Copy it to a secure location"
+                    echo "- Fund this wallet with ETH for gas fees"
+                    echo "- Never share this key with anyone"
+                    echo ""
+                    
+                    read -p "Press Enter after you've saved the private key securely..."
+                    echo "$generated_key"
+                    return 0
+                else
+                    error_log "Failed to generate private key. Please try again."
+                fi
+                ;;
+            *)
+                error_log "Invalid choice. Please enter 1 or 2."
+                ;;
+        esac
+    done
+}
+
+# Function to get RPC URL configuration
+configure_rpc_url() {
+    echo ""
+    echo -e "${BLUE}🌐 RPC URL Configuration${NC}"
+    echo "Choose your RPC provider:"
+    echo "1) Alchemy (recommended)"
+    echo "2) Infura"
+    echo "3) QuickNode"
+    echo "4) Other/Custom"
+    echo ""
+    
+    while true; do
+        read -p "Enter your choice (1-4): " rpc_choice
+        
+        case $rpc_choice in
+            1)
+                echo ""
+                log "🔗 Configuring Alchemy RPC..."
+                echo "Please provide your Alchemy API key."
+                echo "You can get one free at: https://www.alchemy.com"
+                echo ""
+                
+                while true; do
+                    read -p "Enter your Alchemy API key: " alchemy_key
+                    if [[ -n "$alchemy_key" ]]; then
+                        local rpc_url="https://base-mainnet.g.alchemy.com/v2/$alchemy_key"
+                        log "✅ Alchemy RPC configured"
+                        echo "$rpc_url"
+                        return 0
+                    else
+                        error_log "API key cannot be empty. Please try again."
+                    fi
+                done
+                ;;
+            2)
+                echo ""
+                log "🔗 Configuring Infura RPC..."
+                echo "Please provide your Infura project ID."
+                echo "You can get one free at: https://infura.io"
+                echo ""
+                
+                while true; do
+                    read -p "Enter your Infura project ID: " infura_id
+                    if [[ -n "$infura_id" ]]; then
+                        local rpc_url="https://base-mainnet.infura.io/v3/$infura_id"
+                        log "✅ Infura RPC configured"
+                        echo "$rpc_url"
+                        return 0
+                    else
+                        error_log "Project ID cannot be empty. Please try again."
+                    fi
+                done
+                ;;
+            3)
+                echo ""
+                log "🔗 Configuring QuickNode RPC..."
+                echo "Please provide your QuickNode endpoint URL."
+                echo "You can get one at: https://quicknode.com"
+                echo ""
+                
+                while true; do
+                    read -p "Enter your QuickNode URL: " quicknode_url
+                    if [[ -n "$quicknode_url" ]]; then
+                        log "✅ QuickNode RPC configured"
+                        echo "$quicknode_url"
+                        return 0
+                    else
+                        error_log "URL cannot be empty. Please try again."
+                    fi
+                done
+                ;;
+            4)
+                echo ""
+                log "🔗 Configuring custom RPC..."
+                echo "Please provide your custom RPC URL."
+                echo ""
+                
+                while true; do
+                    read -p "Enter your RPC URL: " custom_url
+                    if [[ -n "$custom_url" ]]; then
+                        # Basic URL validation
+                        if [[ $custom_url =~ ^https?:// ]]; then
+                            log "✅ Custom RPC configured"
+                            echo "$custom_url"
+                            return 0
+                        else
+                            error_log "Invalid URL format. Must start with http:// or https://"
+                        fi
+                    else
+                        error_log "URL cannot be empty. Please try again."
+                    fi
+                done
+                ;;
+            *)
+                error_log "Invalid choice. Please enter 1-4."
+                ;;
+        esac
+    done
+}
+
+# Enhanced function to create .env file with user input
 create_env_template() {
-    if [[ ! -f "$ENV_FILE" ]]; then
-        log "Creating .env template..."
-        cat > "$ENV_FILE" << 'EOF'
+    if [[ -f "$ENV_FILE" ]]; then
+        echo ""
+        echo -e "${YELLOW}⚠️  .env file already exists.${NC}"
+        read -p "Do you want to overwrite it? [y/N]: " overwrite_choice
+        
+        if [[ ! $overwrite_choice =~ ^[Yy]$ ]]; then
+            log "Keeping existing .env file"
+            return 0
+        fi
+        
+        # Backup existing .env file
+        cp "$ENV_FILE" "$ENV_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+        log "Backed up existing .env file"
+    fi
+    
+    log "🔧 Configuring environment variables..."
+    
+    # Get RPC URL
+    local rpc_url=$(configure_rpc_url)
+    
+    # Get private key
+    local private_key=$(configure_private_key)
+    
+    # Create the .env file
+    log "📝 Creating .env file..."
+    cat > "$ENV_FILE" << EOF
 # RPC Configuration
-RPC_URL=https://base-mainnet.g.alchemy.com/v2/API-KEY
+RPC_URL=$rpc_url
 
 # Private Keys (without 0x prefix)
-PK_MAIN=your-funding-wallet-private-key-here
+PK_MAIN=$private_key
 
 # Optional: Gas Settings
 GAS_PRICE_GWEI=1
@@ -344,8 +568,28 @@ DEFAULT_WALLET_COUNT=1000
 DEFAULT_CHUNK_SIZE=500
 DEFAULT_BATCH_SIZE=50
 EOF
-        warning_log "Created .env template. Please fill in your actual values!"
-    fi
+    
+    # Set secure permissions on .env file
+    chmod 600 "$ENV_FILE"
+    
+    echo ""
+    log "✅ .env file created successfully!"
+    echo -e "${GREEN}Configuration Summary:${NC}"
+    echo "- RPC URL: Configured ✅"
+    echo "- Private Key: Configured ✅"
+    echo "- File permissions: Set to 600 (owner read/write only) ✅"
+    echo ""
+    echo -e "${YELLOW}Next steps:${NC}"
+    echo "1. Make sure your funding wallet has sufficient ETH for gas fees"
+    echo "2. Test the configuration by running: node script.js check"
+    echo "3. Start creating wallets with: node script.js create [count]"
+    echo ""
+    
+    # Security warning
+    echo -e "${RED}🔒 Security Reminder:${NC}"
+    echo "- Keep your .env file secure and never share it"
+    echo "- The .env file contains sensitive information"
+    echo "- Consider using a dedicated funding wallet for this script"
 }
 
 # Function to update external scripts
@@ -492,7 +736,6 @@ case ${1:-help} in
         install_dependencies
         validate_scripts
         log "✅ Setup completed!"
-        log "📝 Please configure your .env file with your RPC URL and private keys"
         log "🚀 You can now use: node script.js [command] [args]"
         ;;
     update)
