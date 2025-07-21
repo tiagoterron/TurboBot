@@ -716,6 +716,45 @@ create_env_template() {
         esac
     done
     
+    # Get initial wallet count
+    echo ""
+    echo -e "${BLUE}👛 Initial Wallet Creation${NC}"
+    echo "How many wallets would you like to create initially?"
+    echo "Note: You can always create more wallets later using: node script.js create [count]"
+    echo ""
+    
+    local wallet_count=""
+    while true; do
+        read -p "Enter number of wallets to create (0 to skip, default: 100): " wallet_input
+        
+        # Use default if empty
+        if [[ -z "$wallet_input" ]]; then
+            wallet_count=100
+            break
+        fi
+        
+        # Validate numeric input
+        if [[ "$wallet_input" =~ ^[0-9]+$ ]]; then
+            wallet_count="$wallet_input"
+            if [[ $wallet_count -eq 0 ]]; then
+                log "Skipping initial wallet creation"
+                break
+            elif [[ $wallet_count -gt 10000 ]]; then
+                warning_log "Creating more than 10,000 wallets may take a very long time."
+                read -p "Are you sure you want to continue? [y/N]: " confirm
+                if [[ $confirm =~ ^[Yy]$ ]]; then
+                    break
+                else
+                    continue
+                fi
+            else
+                break
+            fi
+        else
+            error_log "Please enter a valid number (0 or positive integer)"
+        fi
+    done
+    
     # Create the .env file
     log "📝 Creating .env file..."
     cat > "$ENV_FILE" << EOF
@@ -744,13 +783,44 @@ EOF
     echo "- RPC URL: Configured ✅"
     echo "- Private Key: Configured ✅"
     echo "- File permissions: Set to 600 (owner read/write only) ✅"
-    echo ""
-    echo -e "${YELLOW}Next steps:${NC}"
-    echo "1. Make sure your funding wallet has sufficient ETH for gas fees"
-    echo "2. Test the configuration by running: node script.js check"
-    echo "3. Start creating wallets with: node script.js create [count]"
+    if [[ $wallet_count -gt 0 ]]; then
+        echo "- Initial wallets to create: $wallet_count ✅"
+    fi
     echo ""
     
+    # Create initial wallets if requested
+    if [[ $wallet_count -gt 0 ]]; then
+        echo -e "${BLUE}🚀 Creating Initial Wallets${NC}"
+        log "Creating $wallet_count wallets..."
+        echo ""
+        
+        if run_wallet_manager create "$wallet_count"; then
+            echo ""
+            log "✅ Successfully created $wallet_count wallets!"
+            echo ""
+            echo -e "${GREEN}Next steps:${NC}"
+            echo "1. Check wallet statistics: node script.js check"
+            echo "2. Fund wallets with airdrops: node script.js airdrop-batch [chunk_size]"
+            echo "3. Execute swaps: node script.js swap-batch [batch_size]"
+            echo "4. Or use full automation: node script.js full [wallets] [chunk] [batch]"
+        else
+            echo ""
+            error_log "Failed to create wallets. You can try again later with:"
+            echo "  node script.js create $wallet_count"
+            echo ""
+            echo -e "${YELLOW}Troubleshooting:${NC}"
+            echo "1. Make sure your funding wallet has ETH for gas fees"
+            echo "2. Check your RPC URL is working: node script.js check"
+            echo "3. Verify your private key is correct"
+        fi
+    else
+        echo -e "${YELLOW}Next steps:${NC}"
+        echo "1. Make sure your funding wallet has sufficient ETH for gas fees"
+        echo "2. Test the configuration by running: node script.js check"
+        echo "3. Start creating wallets with: node script.js create [count]"
+    fi
+    
+    echo ""
     # Security warning
     echo -e "${RED}🔒 Security Reminder:${NC}"
     echo "- Keep your .env file secure and never share it"
