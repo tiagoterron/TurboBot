@@ -352,6 +352,37 @@ EOF
     echo "$generated_key"
 }
 
+# Function to get wallet address from private key
+get_wallet_address() {
+    local private_key=$1
+    local temp_script=$(mktemp)
+    cat > "$temp_script" << EOF
+const crypto = require('crypto');
+const secp256k1 = require('secp256k1');
+
+try {
+    const privateKeyBuffer = Buffer.from('$private_key', 'hex');
+    const publicKey = secp256k1.publicKeyCreate(privateKeyBuffer, false);
+    const publicKeyHash = crypto.createHash('keccak256').update(publicKey.slice(1)).digest();
+    const address = '0x' + publicKeyHash.slice(-20).toString('hex');
+    console.log(address);
+} catch (error) {
+    // Fallback method using ethers if secp256k1 is not available
+    try {
+        const ethers = require('ethers');
+        const wallet = new ethers.Wallet('$private_key');
+        console.log(wallet.address);
+    } catch (ethersError) {
+        console.log('Unable to derive address');
+    }
+}
+EOF
+    
+    local address=$(node "$temp_script" 2>/dev/null)
+    rm "$temp_script"
+    echo "$address"
+}
+
 # Function to get private key configuration
 configure_private_key() {
     echo ""
@@ -678,6 +709,18 @@ create_env_template() {
                         # Remove 0x prefix if present
                         private_key=${user_private_key#0x}
                         log "✅ Private key format is valid"
+                        
+                        # Show wallet address
+                        local wallet_address=$(get_wallet_address "$private_key")
+                        if [[ -n "$wallet_address" && "$wallet_address" != "Unable to derive address" ]]; then
+                            echo ""
+                            echo -e "${GREEN}📍 Wallet Address (for funding):${NC}"
+                            echo -e "${BLUE}$wallet_address${NC}"
+                            echo ""
+                            echo -e "${YELLOW}💰 Important: Send ETH to this address for gas fees!${NC}"
+                            echo ""
+                        fi
+                        
                         break 2
                     else
                         error_log "Invalid private key format. Must be 64 hexadecimal characters."
@@ -695,15 +738,24 @@ create_env_template() {
                     echo -e "${GREEN}✅ Generated new private key:${NC}"
                     echo -e "${YELLOW}$generated_key${NC}"
                     echo ""
-                    echo -e "${RED}⚠️  IMPORTANT: Save this private key securely!${NC}"
-                    echo "This is the only time it will be displayed in plain text."
+                    
+                    # Show wallet address
+                    local wallet_address=$(get_wallet_address "$generated_key")
+                    if [[ -n "$wallet_address" && "$wallet_address" != "Unable to derive address" ]]; then
+                        echo -e "${GREEN}📍 Wallet Address (for funding):${NC}"
+                        echo -e "${BLUE}$wallet_address${NC}"
+                        echo ""
+                    fi
+                    
+                    echo -e "${RED}⚠️  IMPORTANT: Save this information securely!${NC}"
+                    echo "This is the only time the private key will be displayed in plain text."
                     echo "Make sure to:"
-                    echo "- Copy it to a secure location"
-                    echo "- Fund this wallet with ETH for gas fees"
-                    echo "- Never share this key with anyone"
+                    echo "- Copy the private key to a secure location"
+                    echo "- Send ETH to the wallet address above for gas fees"
+                    echo "- Never share the private key with anyone"
                     echo ""
                     
-                    read -p "Press Enter after you've saved the private key securely..."
+                    read -p "Press Enter after you've saved the private key and wallet address securely..."
                     private_key="$generated_key"
                     break
                 else
@@ -783,6 +835,13 @@ EOF
     echo "- RPC URL: Configured ✅"
     echo "- Private Key: Configured ✅"
     echo "- File permissions: Set to 600 (owner read/write only) ✅"
+    
+    # Show wallet address in summary
+    local wallet_address=$(get_wallet_address "$private_key")
+    if [[ -n "$wallet_address" && "$wallet_address" != "Unable to derive address" ]]; then
+        echo "- Funding Wallet Address: $wallet_address ✅"
+    fi
+    
     if [[ $wallet_count -gt 0 ]]; then
         echo "- Initial wallets to create: $wallet_count ✅"
     fi
@@ -792,9 +851,21 @@ EOF
     if [[ $wallet_count -gt 0 ]]; then
         echo -e "${BLUE}🚀 Creating Initial Wallets${NC}"
         log "Creating $wallet_count wallets..."
+        
+        # Debug information
+        log "Current directory: $(pwd)"
+        log "Script directory: $SCRIPT_DIR"
+        log "Checking if script.js exists: $(ls -la "$WALLET_MANAGER_JS" 2>/dev/null || echo 'NOT FOUND')"
+        log "Checking if .env exists: $(ls -la "$ENV_FILE" 2>/dev/null || echo 'NOT FOUND')"
+        
         echo ""
         
-        if run_wallet_manager create "$wallet_count"; then
+        # Change to script directory and run wallet creation
+        cd "$SCRIPT_DIR"
+        log "Changed to directory: $(pwd)"
+        log "Running: node script.js create $wallet_count"
+        
+        if node script.js create "$wallet_count"; then
             echo ""
             log "✅ Successfully created $wallet_count wallets!"
             echo ""
@@ -805,13 +876,17 @@ EOF
             echo "4. Or use full automation: node script.js full [wallets] [chunk] [batch]"
         else
             echo ""
-            error_log "Failed to create wallets. You can try again later with:"
+            error_log "Failed to create wallets. Exit code: $?"
+            echo "You can try again later with:"
+            echo "  cd $SCRIPT_DIR"
             echo "  node script.js create $wallet_count"
             echo ""
             echo -e "${YELLOW}Troubleshooting:${NC}"
             echo "1. Make sure your funding wallet has ETH for gas fees"
             echo "2. Check your RPC URL is working: node script.js check"
             echo "3. Verify your private key is correct"
+            echo "4. Check if script.js was downloaded correctly"
+            echo "5. Check if dependencies are installed: npm list"
         fi
     else
         echo -e "${YELLOW}Next steps:${NC}"
