@@ -15,7 +15,7 @@ const config = {
     gasSettings: {
         gasPrice: process.env.GAS_PRICE_GWEI ? ethers.utils.parseUnits(process.env.GAS_PRICE_GWEI, 9) : null,
         gasLimit: process.env.GAS_LIMIT ? parseInt(process.env.GAS_LIMIT) : null,
-        gasMax: process.env.GAS_MAX ? String(process.env.GAS_MAX) : "0.0000008"
+        gasMax: process.env.GAS_MAX ? String(process.env.GAS_MAX) : "0.000004"
     }
 };
 
@@ -170,6 +170,349 @@ async function getGasEstimates(tx, options) {
     
     return { gasLimit, gasPrice, gasWei };
 }
+
+async function analyzeGasPrice(operationType = 'OPERATION', estimatedGasUnits = 400000, bufferMultiplier = 1.2) {
+    try {
+        // Get gas max limit from config
+        const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+            config.gasSettings.gasMax : 
+            config.gasSettings.gasMax.toString();
+        const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+        
+        console.log(`🔍 Analyzing gas conditions for ${operationType}...`);
+        console.log(`⚙️  Gas max limit: ${gasMaxETH} ETH`);
+        
+        // Get current gas price from network
+        const currentGasPrice = await provider.getGasPrice();
+        const currentGasPriceGwei = ethers.utils.formatUnits(currentGasPrice, 9);
+        
+        console.log(`⛽ Current network gas price: ${currentGasPriceGwei} Gwei`);
+        
+        // Apply gas price adjustments (same logic as in your existing functions)
+        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
+        let adjustedGasPrice = currentGasPrice.lt(minGasPrice) ? 
+            minGasPrice.mul(5) : currentGasPrice.mul(120).div(100); // 5x minimum or 20% boost
+        
+        const adjustedGasPriceGwei = ethers.utils.formatUnits(adjustedGasPrice, 9);
+        console.log(`📈 Adjusted gas price (with boost): ${adjustedGasPriceGwei} Gwei`);
+        
+        // Calculate estimated gas cost with buffer
+        const bufferedGasUnits = Math.floor(estimatedGasUnits * bufferMultiplier);
+        const estimatedGasCost = adjustedGasPrice.mul(bufferedGasUnits);
+        const estimatedGasCostETH = ethers.utils.formatUnits(estimatedGasCost, 18);
+        
+        console.log(`🧮 Estimated gas units: ${bufferedGasUnits.toLocaleString()} (${estimatedGasUnits.toLocaleString()} + ${((bufferMultiplier - 1) * 100).toFixed(0)}% buffer)`);
+        console.log(`💰 Estimated gas cost: ${estimatedGasCostETH} ETH`);
+        
+        // Compare against gas max limit
+        const gasRatio = estimatedGasCost.mul(10000).div(gasMaxWei).toNumber() / 100; // Percentage with 2 decimal places
+        const withinLimit = estimatedGasCost.lte(gasMaxWei);
+        
+        console.log(`📊 Gas cost ratio: ${gasRatio.toFixed(2)}% of maximum allowed`);
+        
+        // Determine recommendation based on gas cost analysis
+        let recommendation, priority, waitTime;
+        
+        if (gasRatio <= 30) {
+            recommendation = 'PROCEED_IMMEDIATELY';
+            priority = 'LOW_COST';
+            waitTime = 0;
+            console.log(`✅ Gas conditions excellent - proceed immediately`);
+        } else if (gasRatio <= 60) {
+            recommendation = 'PROCEED_NORMAL';
+            priority = 'MODERATE_COST';
+            waitTime = 0;
+            console.log(`✅ Gas conditions acceptable - proceed normally`);
+        } else if (gasRatio <= 85) {
+            recommendation = 'PROCEED_CAUTIOUS';
+            priority = 'HIGH_COST';
+            waitTime = 1000; // 1 second pause
+            console.log(`⚠️  Gas conditions expensive but acceptable - proceed with caution`);
+        } else if (withinLimit) {
+            recommendation = 'PROCEED_EXPENSIVE';
+            priority = 'VERY_HIGH_COST';
+            waitTime = 2000; // 2 second pause
+            console.log(`⚠️  Gas conditions very expensive - last chance before limit`);
+        } else {
+            recommendation = 'ABORT_HIGH_GAS';
+            priority = 'EXCEEDS_LIMIT';
+            waitTime = 5000; // 5 second wait before retry
+            console.log(`❌ Gas cost exceeds maximum limit - operation should be aborted`);
+        }
+        
+        // Additional warnings based on gas price levels
+        if (parseFloat(adjustedGasPriceGwei) > 2.0) {
+            console.log(`🚨 Network congestion detected - gas price is ${adjustedGasPriceGwei} Gwei`);
+        }
+        
+        if (parseFloat(adjustedGasPriceGwei) > 5.0) {
+            console.log(`⚡ Extremely high gas detected - consider waiting for network to calm down`);
+        }
+        
+        // Calculate suggested retry time for failed operations
+        let suggestedRetryTime = 30000; // 30 seconds default
+        if (gasRatio > 100) {
+            suggestedRetryTime = 60000; // 1 minute for way over limit
+        } else if (gasRatio > 90) {
+            suggestedRetryTime = 45000; // 45 seconds for just over limit
+        }
+        
+        const analysisResult = {
+            success: true,
+            recommendation,
+            priority,
+            withinLimit,
+            gasDetails: {
+                currentGasPrice: currentGasPrice,
+                currentGasPriceGwei: parseFloat(currentGasPriceGwei),
+                adjustedGasPrice: adjustedGasPrice,
+                adjustedGasPriceGwei: parseFloat(adjustedGasPriceGwei),
+                estimatedGasUnits: bufferedGasUnits,
+                estimatedGasCost: estimatedGasCost,
+                estimatedGasCostETH: parseFloat(estimatedGasCostETH),
+                gasMaxWei: gasMaxWei,
+                gasMaxETH: parseFloat(gasMaxETH),
+                gasRatioPercent: gasRatio
+            },
+            timing: {
+                waitTime,
+                suggestedRetryTime
+            },
+            operationType
+        };
+        
+        console.log(`📋 Gas analysis complete for ${operationType}`);
+        return analysisResult;
+        
+    } catch (error) {
+        console.error(`❌ Gas analysis failed for ${operationType}:`, error.message);
+        
+        // Return safe fallback recommendation
+        return {
+            success: false,
+            recommendation: 'PROCEED_CAUTIOUS',
+            priority: 'UNKNOWN',
+            withinLimit: false, // Assume worst case
+            error: error.message,
+            gasDetails: {
+                currentGasPriceGwei: 0,
+                adjustedGasPriceGwei: 0,
+                estimatedGasCostETH: 0,
+                gasMaxETH: typeof config.gasSettings.gasMax === 'string' ? 
+                    parseFloat(config.gasSettings.gasMax) : config.gasSettings.gasMax,
+                gasRatioPercent: 100 // Assume at limit
+            },
+            timing: {
+                waitTime: 3000, // 3 second wait on error
+                suggestedRetryTime: 60000 // 1 minute retry on error
+            },
+            operationType
+        };
+    }
+}
+
+async function analyzeTransactionGas(transaction, signer, operationType = 'OPERATION', bufferMultiplier = 1.2) {
+    try {
+        // Get gas max limit from config
+        const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+            config.gasSettings.gasMax : 
+            config.gasSettings.gasMax.toString();
+        const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+        
+        console.log(`🔍 Analyzing specific transaction gas for ${operationType}...`);
+        console.log(`⚙️  Gas max limit: ${gasMaxETH} ETH`);
+        
+        // Get current gas price from network
+        const currentGasPrice = await provider.getGasPrice();
+        const currentGasPriceGwei = ethers.utils.formatUnits(currentGasPrice, 9);
+        
+        console.log(`⛽ Current network gas price: ${currentGasPriceGwei} Gwei`);
+        
+        // Apply gas price adjustments (same logic as in your existing functions)
+        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
+        let adjustedGasPrice = currentGasPrice.lt(minGasPrice) ? 
+            minGasPrice.mul(5) : currentGasPrice.mul(120).div(100); // 5x minimum or 20% boost
+        
+        const adjustedGasPriceGwei = ethers.utils.formatUnits(adjustedGasPrice, 9);
+        console.log(`📈 Adjusted gas price (with boost): ${adjustedGasPriceGwei} Gwei`);
+        
+        // Estimate gas for the specific transaction
+        let estimatedGasLimit;
+        try {
+            console.log(`🧮 Estimating gas for specific transaction...`);
+            estimatedGasLimit = await provider.estimateGas({
+                ...transaction,
+                from: signer.address
+            });
+            console.log(`📊 Estimated gas limit: ${estimatedGasLimit.toString()}`);
+        } catch (gasError) {
+            console.log(`⚠️  Gas estimation failed, using fallback: ${gasError.message}`);
+            
+            // Provide fallback gas limits based on operation type
+            if (operationType.includes('FUNDING')) {
+                estimatedGasLimit = ethers.BigNumber.from("21000");
+            } else if (operationType.includes('SWAP') || operationType.includes('MULTISWAP')) {
+                estimatedGasLimit = ethers.BigNumber.from("500000");
+            } else {
+                estimatedGasLimit = ethers.BigNumber.from("300000");
+            }
+            
+            console.log(`🔄 Using fallback gas limit: ${estimatedGasLimit.toString()}`);
+        }
+        
+        // Apply buffer to gas limit
+        const bufferedGasLimit = estimatedGasLimit.mul(Math.floor(bufferMultiplier * 100)).div(100);
+        console.log(`📈 Buffered gas limit (+${((bufferMultiplier - 1) * 100).toFixed(0)}%): ${bufferedGasLimit.toString()}`);
+        
+        // Calculate estimated gas cost
+        const estimatedGasCost = adjustedGasPrice.mul(bufferedGasLimit);
+        const estimatedGasCostETH = ethers.utils.formatUnits(estimatedGasCost, 18);
+        
+        console.log(`💰 Estimated gas cost: ${estimatedGasCostETH} ETH`);
+        
+        // Compare against gas max limit
+        const gasRatio = estimatedGasCost.mul(10000).div(gasMaxWei).toNumber() / 100; // Percentage with 2 decimal places
+        const withinLimit = estimatedGasCost.lte(gasMaxWei);
+        
+        console.log(`📊 Gas cost ratio: ${gasRatio.toFixed(2)}% of maximum allowed`);
+        
+        // Check if sender has enough balance for gas + value
+        let hasEnoughBalance = true;
+        let requiredBalance = estimatedGasCost;
+        
+        if (transaction.value) {
+            const txValue = ethers.BigNumber.from(transaction.value);
+            requiredBalance = requiredBalance.add(txValue);
+        }
+        
+        try {
+            const senderBalance = await provider.getBalance(signer.address);
+            hasEnoughBalance = senderBalance.gte(requiredBalance);
+            
+            console.log(`👛 Sender balance: ${ethers.utils.formatUnits(senderBalance, 18)} ETH`);
+            console.log(`💸 Required (gas + value): ${ethers.utils.formatUnits(requiredBalance, 18)} ETH`);
+            
+            if (!hasEnoughBalance) {
+                console.log(`❌ Insufficient balance for transaction`);
+            }
+        } catch (balanceError) {
+            console.log(`⚠️  Could not check sender balance: ${balanceError.message}`);
+            hasEnoughBalance = false; // Assume worst case
+        }
+        
+        // Determine recommendation based on gas cost analysis
+        let recommendation, priority, waitTime;
+        
+        if (!hasEnoughBalance) {
+            recommendation = 'ABORT_INSUFFICIENT_BALANCE';
+            priority = 'INSUFFICIENT_FUNDS';
+            waitTime = 0;
+            console.log(`❌ Transaction aborted - insufficient balance`);
+        } else if (gasRatio <= 30) {
+            recommendation = 'PROCEED_IMMEDIATELY';
+            priority = 'LOW_COST';
+            waitTime = 0;
+            console.log(`✅ Gas conditions excellent - proceed immediately`);
+        } else if (gasRatio <= 60) {
+            recommendation = 'PROCEED_NORMAL';
+            priority = 'MODERATE_COST';
+            waitTime = 0;
+            console.log(`✅ Gas conditions acceptable - proceed normally`);
+        } else if (gasRatio <= 85) {
+            recommendation = 'PROCEED_CAUTIOUS';
+            priority = 'HIGH_COST';
+            waitTime = 1000; // 1 second pause
+            console.log(`⚠️  Gas conditions expensive but acceptable - proceed with caution`);
+        } else if (withinLimit) {
+            recommendation = 'PROCEED_EXPENSIVE';
+            priority = 'VERY_HIGH_COST';
+            waitTime = 2000; // 2 second pause
+            console.log(`⚠️  Gas conditions very expensive - last chance before limit`);
+        } else {
+            recommendation = 'ABORT_HIGH_GAS';
+            priority = 'EXCEEDS_LIMIT';
+            waitTime = 5000; // 5 second wait before retry
+            console.log(`❌ Gas cost exceeds maximum limit - transaction should be aborted`);
+        }
+        
+        // Additional warnings based on gas price levels
+        if (parseFloat(adjustedGasPriceGwei) > 2.0) {
+            console.log(`🚨 Network congestion detected - gas price is ${adjustedGasPriceGwei} Gwei`);
+        }
+        
+        if (parseFloat(adjustedGasPriceGwei) > 5.0) {
+            console.log(`⚡ Extremely high gas detected - consider waiting for network to calm down`);
+        }
+        
+        // Calculate suggested retry time for failed operations
+        let suggestedRetryTime = 30000; // 30 seconds default
+        if (gasRatio > 100) {
+            suggestedRetryTime = 60000; // 1 minute for way over limit
+        } else if (gasRatio > 90) {
+            suggestedRetryTime = 45000; // 45 seconds for just over limit
+        }
+        
+        const analysisResult = {
+            success: true,
+            recommendation,
+            priority,
+            withinLimit,
+            hasEnoughBalance,
+            gasDetails: {
+                currentGasPrice: currentGasPrice,
+                currentGasPriceGwei: parseFloat(currentGasPriceGwei),
+                adjustedGasPrice: adjustedGasPrice,
+                adjustedGasPriceGwei: parseFloat(adjustedGasPriceGwei),
+                estimatedGasLimit: estimatedGasLimit,
+                bufferedGasLimit: bufferedGasLimit,
+                estimatedGasCost: estimatedGasCost,
+                estimatedGasCostETH: parseFloat(estimatedGasCostETH),
+                gasMaxWei: gasMaxWei,
+                gasMaxETH: parseFloat(gasMaxETH),
+                gasRatioPercent: gasRatio,
+                requiredBalance: requiredBalance,
+                requiredBalanceETH: parseFloat(ethers.utils.formatUnits(requiredBalance, 18))
+            },
+            timing: {
+                waitTime,
+                suggestedRetryTime
+            },
+            operationType
+        };
+        
+        console.log(`📋 Transaction gas analysis complete for ${operationType}`);
+        return analysisResult;
+        
+    } catch (error) {
+        console.error(`❌ Transaction gas analysis failed for ${operationType}:`, error.message);
+        
+        // Return safe fallback recommendation
+        return {
+            success: false,
+            recommendation: 'ABORT_HIGH_GAS', // Assume worst case on error
+            priority: 'UNKNOWN',
+            withinLimit: false,
+            hasEnoughBalance: false,
+            error: error.message,
+            gasDetails: {
+                currentGasPriceGwei: 0,
+                adjustedGasPriceGwei: 0,
+                estimatedGasCostETH: 0,
+                gasMaxETH: typeof config.gasSettings.gasMax === 'string' ? 
+                    parseFloat(config.gasSettings.gasMax) : config.gasSettings.gasMax,
+                gasRatioPercent: 100, // Assume at limit
+                bufferedGasLimit: ethers.BigNumber.from("500000"), // Fallback for use in transactions
+                adjustedGasPrice: ethers.utils.parseUnits("1", 9) // Fallback 1 Gwei
+            },
+            timing: {
+                waitTime: 3000, // 3 second wait on error
+                suggestedRetryTime: 60000 // 1 minute retry on error
+            },
+            operationType
+        };
+    }
+}
+
 
 // File operations
 function loadWallets() {
@@ -1480,7 +1823,7 @@ async function executeV3Swap(index, wallets, tokenAddress) {
         // Force minimum gas price for Base network
         const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
         let gasPrice = baseGasPrice.lt(minGasPrice) ? 
-            minGasPrice.mul(5) : baseGasPrice.mul(120).div(100); // 5x minimum or 20% boost
+            minGasPrice.mul(5) : baseGasPrice.mul(100).div(100); // 5x minimum or 20% boost
         
         console.log(`Using gas price: ${ethers.utils.formatUnits(gasPrice, 9)} Gwei`);
         
@@ -1495,7 +1838,7 @@ async function executeV3Swap(index, wallets, tokenAddress) {
             });
             
             // Add 20% buffer to gas limit
-            gasLimit = gasLimit.mul(120).div(100);
+            gasLimit = gasLimit.mul(100).div(100);
             console.log(`Estimated gas limit: ${gasLimit.toString()}`);
         } catch (gasError) {
             console.log(`Gas estimation failed, using fallback: ${gasError.message}`);
@@ -2314,80 +2657,124 @@ async function createWalletAndMultiSmall(multiTokens, cycleDelay = 2000, funding
     console.log(`Starting createWalletAndMultiSmall cycle...`);
     console.log(`Funding amount: ${fundingAmount} ETH`);
     console.log(`Cycle delay: ${cycleDelay}ms`);
-    
-    // Get gas max limit from config
-    const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
-        config.gasSettings.gasMax : 
-        config.gasSettings.gasMax.toString();
-    const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
-    console.log(`Gas max limit: ${gasMaxETH} ETH`);
 
     try {
         mainSigner = new ethers.Wallet(config.fundingPrivateKey, provider);
-        console.log("Main wallet:", mainSigner.address);
-
-        // Step 1: Create a random new wallet
         connectedNewWallet = newWallet.connect(provider);
         
+        console.log("Main wallet:", mainSigner.address);
         console.log(`Created new wallet: ${newWallet.address} ${newWallet.privateKey}`);
 
         savePrivateKey([
             newWallet.address,
             newWallet.privateKey
-        ])
+        ]);
         
-        // Step 2: Fund the new wallet from main signer
+        // Step 1: Check main signer balance first
         const fundingAmountWei = ethers.utils.parseUnits(fundingAmount, 18);
-        
-        // Check main signer balance
         const mainBalance = await provider.getBalance(mainSigner.address);
         if (mainBalance.lt(fundingAmountWei)) {
             throw new Error(`Insufficient balance in main wallet. Need ${fundingAmount} ETH, have ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
         }
         
-        console.log(`Funding new wallet with ${fundingAmount} ETH...`);
+        // Step 2: ANALYZE SWAP TRANSACTION FIRST (most expensive operation)
+        console.log(`\n🔍 === ANALYZING SWAP TRANSACTION FIRST ===`);
         
-        // Prepare funding transaction
-        const fundingTx = {
+        // Prepare swap parameters without funding the wallet yet
+        const tokensToSwap = multiTokens || defaultTokens["V2"];
+        const numberOfTokens = tokensToSwap.length;
+        console.log(`Number of tokens to analyze for swap: ${numberOfTokens}`);
+        
+        // Use minimal amounts for analysis
+        const amountPerToken = ethers.BigNumber.from("10"); // 10 wei per token
+        const totalSwapAmount = amountPerToken.mul(numberOfTokens);
+        
+        console.log(`Analyzing swap for ${totalSwapAmount.toString()} wei total (${ethers.utils.formatUnits(totalSwapAmount, 18)} ETH)`);
+        
+        // Create swap details for analysis
+        const swapDetails = tokensToSwap.map(tokenAddress => ({
+            tokenAddress: tokenAddress,
+            ethAmount: amountPerToken,
+            recipient: connectedNewWallet.address, // Use the new wallet address (even though it's not funded yet)
+            router: contracts.uniswapRouter,
+            minAmountOut: 0
+        }));
+
+        // Create contract interface for analysis (don't need to fund wallet yet)
+        const multicallInterface = new ethers.utils.Interface(multicallAbi);
+        
+        // CREATE THE ACTUAL SWAP TRANSACTION OBJECT FOR ANALYSIS
+        const swapTransaction = {
+            to: "0x0D99F3072fDbEDFFFf920f166F3B5d7e2bE32Ba0",
+            data: multicallInterface.encodeFunctionData("executeMultiSwap", [swapDetails]),
+            value: totalSwapAmount
+        };
+        
+        console.log(`Pre-analyzing multi-swap transaction for ${numberOfTokens} tokens...`);
+        
+        const swapGasAnalysis = await analyzeTransactionGas(
+            swapTransaction,
+            mainSigner, // This will check gas estimation (wallet doesn't need balance for gas estimation)
+            'V2_MULTISWAP',
+            1.2
+        );
+        
+        // CHECK SWAP VIABILITY BEFORE FUNDING
+        if (swapGasAnalysis.recommendation === 'ABORT_HIGH_GAS') {
+            console.log(`❌ Swap transaction would be too expensive: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+            console.log(`⚠️  Aborting entire cycle - no funding needed`);
+            console.log(`⏱️  Waiting ${swapGasAnalysis.timing.suggestedRetryTime}ms before retry...`);
+            await sleep(swapGasAnalysis.timing.suggestedRetryTime);
+            return createWalletAndMultiSmall(multiTokens, cycleDelay, fundingAmount);
+        }
+        
+        console.log(`✅ Swap analysis passed - estimated cost: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+        console.log(`📊 Swap gas recommendation: ${swapGasAnalysis.recommendation}`);
+        
+        // Step 3: ANALYZE FUNDING TRANSACTION (only after swap passes)
+        console.log(`\n🔍 === ANALYZING FUNDING TRANSACTION ===`);
+        
+        const fundingTransaction = {
             to: newWallet.address,
             value: fundingAmountWei
         };
         
-        // Get gas estimates with fallback
-        let fundingGasLimit, fundingGasPrice;
-        try {
-            // Try to use getGasEstimates if it exists
-            if (typeof getGasEstimates === 'function') {
-                const gasEstimates = await getGasEstimates(fundingTx, { provider: mainSigner });
-                fundingGasLimit = gasEstimates.gasLimit;
-                fundingGasPrice = gasEstimates.gasPrice;
-            } else {
-                throw new Error("getGasEstimates not available");
-            }
-        } catch (gasError) {
-            console.log("Using fallback gas estimation for funding");
-            const baseGasPrice = await provider.getGasPrice();
-            fundingGasPrice = baseGasPrice.mul(120).div(100); // 20% boost
-            fundingGasLimit = 21000;
-        }
+        const fundingGasAnalysis = await analyzeTransactionGas(
+            fundingTransaction,
+            mainSigner,
+            'V2_FUNDING',
+            1.2
+        );
         
-        // Check funding transaction gas cost against gasMax
-        const fundingGasCost = fundingGasPrice.mul(fundingGasLimit);
-        const fundingGasCostETH = ethers.utils.formatUnits(fundingGasCost, 18);
-        
-        console.log(`Funding gas cost: ${fundingGasCostETH} ETH`);
-        
-        if (fundingGasCost.gt(gasMaxWei)) {
-            console.log(`❌ Funding gas cost ${fundingGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
-            console.log(`⚠️  Skipping this cycle due to high gas costs`);
-            
-            // Wait and retry
-            console.log(`🔄 Waiting ${cycleDelay}ms before retrying...`);
-            await sleep(cycleDelay);
+        if (fundingGasAnalysis.recommendation === 'ABORT_HIGH_GAS' || 
+            fundingGasAnalysis.recommendation === 'ABORT_INSUFFICIENT_BALANCE') {
+            console.log(`❌ Funding transaction aborted: ${fundingGasAnalysis.recommendation}`);
+            console.log(`⏱️  Waiting ${fundingGasAnalysis.timing.suggestedRetryTime}ms before retry...`);
+            await sleep(fundingGasAnalysis.timing.suggestedRetryTime);
             return createWalletAndMultiSmall(multiTokens, cycleDelay, fundingAmount);
         }
         
-        // Get nonce with fallback
+        console.log(`✅ Funding analysis passed - estimated cost: ${fundingGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+
+        // Step 4: Apply any recommended wait times from both analyses
+        const maxWaitTime = Math.max(
+            fundingGasAnalysis.timing.waitTime || 0,
+            swapGasAnalysis.timing.waitTime || 0
+        );
+        
+        if (maxWaitTime > 0) {
+            console.log(`⏱️  Gas conditions require ${maxWaitTime}ms pause before proceeding...`);
+            await sleep(maxWaitTime);
+        }
+        
+        console.log(`\n📊 === PRE-FLIGHT SUMMARY ===`);
+        console.log(`💰 Total estimated costs:`);
+        console.log(`   • Funding: ${fundingGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+        console.log(`   • Swap: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+        console.log(`   • Total gas: ${(parseFloat(fundingGasAnalysis.gasDetails.estimatedGasCostETH) + parseFloat(swapGasAnalysis.gasDetails.estimatedGasCostETH)).toFixed(8)} ETH`);
+        console.log(`✅ Both operations approved - proceeding with funding...`);
+        
+        // Step 5: Execute funding with analyzed gas parameters (only after both checks pass)
         let fundingNonce;
         try {
             if (typeof getNonce === 'function') {
@@ -2399,44 +2786,28 @@ async function createWalletAndMultiSmall(multiTokens, cycleDelay = 2000, funding
             fundingNonce = await mainSigner.getTransactionCount("pending");
         }
         
-        console.log(`✅ Funding gas cost within limits, proceeding...`);
-        console.log(`Funding gas price: ${ethers.utils.formatUnits(fundingGasPrice, 9)} Gwei`);
-        
-        // Send funding transaction
-        const fundingTransaction = await mainSigner.sendTransaction({
-            ...fundingTx,
-            gasLimit: fundingGasLimit,
-            gasPrice: fundingGasPrice,
+        console.log(`\n💸 === EXECUTING FUNDING ===`);
+        const fundingTransactionSent = await mainSigner.sendTransaction({
+            ...fundingTransaction,
+            gasLimit: fundingGasAnalysis.gasDetails.bufferedGasLimit,
+            gasPrice: fundingGasAnalysis.gasDetails.adjustedGasPrice,
             nonce: fundingNonce
         });
         
-        console.log(`Funding transaction sent: ${fundingTransaction.hash}`);
-        const fundingReceipt = await fundingTransaction.wait();
+        console.log(`Funding transaction sent: ${fundingTransactionSent.hash}`);
+        const fundingReceipt = await fundingTransactionSent.wait();
         
-        // Log actual funding gas usage
-        const actualFundingGasCost = fundingGasPrice.mul(fundingReceipt.gasUsed);
+        // Log actual funding results vs analysis
+        const actualFundingGasCost = fundingGasAnalysis.gasDetails.adjustedGasPrice.mul(fundingReceipt.gasUsed);
         const actualFundingGasCostETH = ethers.utils.formatUnits(actualFundingGasCost, 18);
+        const fundingGasEfficiency = ((fundingReceipt.gasUsed.toNumber() / fundingGasAnalysis.gasDetails.bufferedGasLimit.toNumber()) * 100).toFixed(1);
+        
         console.log(`✅ Funding successful - Actual gas cost: ${actualFundingGasCostETH} ETH`);
+        console.log(`📊 Funding efficiency: ${fundingGasEfficiency}% (used ${fundingReceipt.gasUsed.toString()} of ${fundingGasAnalysis.gasDetails.bufferedGasLimit.toString()})`);
         
-        // Verify funding
-        const newWalletBalance = await provider.getBalance(connectedNewWallet.address);
-        console.log(`New wallet balance: ${ethers.utils.formatUnits(newWalletBalance, 18)} ETH`);
-        
-        // Step 3: Execute swap using the new wallet with your custom contract
-        console.log(`Executing multi-swap from new wallet...`);
-
-        // Initialize your custom contract with the NEW WALLET
-        const multicallContract = new ethers.Contract("0x0D99F3072fDbEDFFFf920f166F3B5d7e2bE32Ba0", multicallAbi, connectedNewWallet);
-        
-        // Define the token addresses you want to swap - ADD MORE TOKENS HERE
-        const tokensToSwap = multiTokens || defaultTokens["V2"]
-        
-        const numberOfTokens = tokensToSwap.length;
-        console.log(`Number of tokens to swap: ${numberOfTokens}`);
-        
-        // Calculate available balance for swapping (reserve gas)
+        // Step 6: Wait for balance to update and verify
         let currentBalance = await provider.getBalance(connectedNewWallet.address);
-        console.log(`Current wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+        console.log(`New wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
 
         await new Promise(async (resolve, reject) => {
             let indexETH = 0;
@@ -2449,168 +2820,112 @@ async function createWalletAndMultiSmall(multiTokens, cycleDelay = 2000, funding
                 }
                 
                 if(currentBalance.gt(0)){
-                    console.log('Balance loaded, proceeding with swaps...');
-                    resolve()
+                    console.log('Balance loaded, proceeding with pre-analyzed swap...');
+                    resolve();
+                } else {
+                    reject(new Error("Balance never updated"));
                 }
             } catch(err) {
                 console.warn('Error', err?.message);
-                await sendETHBack(connectedNewWallet.privateKey, mainSigner.address)
+                await sendETHBack(connectedNewWallet.privateKey, mainSigner.address);
                 reject(err);
             }
-        })
+        });
 
-        // Reserve ETH for gas costs (estimate high to be safe)
-        const gasReserve = ethers.utils.parseUnits("0.000004", 18);
-        const availableForSwap = currentBalance.sub(gasReserve);
+        // Step 7: Execute swap with pre-analyzed gas parameters
+        console.log(`\n🔄 === EXECUTING PRE-ANALYZED SWAP ===`);
         
-        if (availableForSwap.lte(0)) {
-            throw new Error(`Insufficient balance for swap after gas reserve. Balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH, Gas reserve: ${ethers.utils.formatUnits(gasReserve, 18)} ETH`);
-        }
+        // Create the actual contract instance now that wallet is funded
+        const multicallContract = new ethers.Contract("0x0D99F3072fDbEDFFFf920f166F3B5d7e2bE32Ba0", multicallAbi, connectedNewWallet);
         
-        // Split available amount equally between all tokens - USE 10 WEI PER TOKEN
-        let amountPerToken = ethers.BigNumber.from("10"); // 10 wei per token
-        let totalSwapAmount = amountPerToken.mul(numberOfTokens);
+        console.log(`Executing multi-swap with pre-analyzed parameters:`);
+        console.log(`   • Gas limit: ${swapGasAnalysis.gasDetails.bufferedGasLimit.toString()}`);
+        console.log(`   • Gas price: ${ethers.utils.formatUnits(swapGasAnalysis.gasDetails.adjustedGasPrice, 9)} Gwei`);
+        console.log(`   • Estimated cost: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
         
-        console.log(`Available for swap: ${ethers.utils.formatUnits(availableForSwap, 18)} ETH`);
-        console.log(`Amount per token: ${amountPerToken.toString()} wei (${ethers.utils.formatUnits(amountPerToken, 18)} ETH)`);
-        console.log(`Total swap amount: ${totalSwapAmount.toString()} wei (${ethers.utils.formatUnits(totalSwapAmount, 18)} ETH)`);
-        
-        // Create swap details for all tokens
-        let swapDetails = tokensToSwap.map(tokenAddress => ({
-            tokenAddress: tokenAddress,
-            ethAmount: amountPerToken,
-            recipient: connectedNewWallet.address,
-            router: contracts.uniswapRouter,
-            minAmountOut: 0
-        }));
-
-        console.log(`Swapping ${amountPerToken.toString()} wei for each of ${numberOfTokens} tokens...`);
-        
-        // Get gas price and estimate more conservatively
-        const currentGasPrice = await provider.getGasPrice();
-        console.log(`Current gas price: ${ethers.utils.formatUnits(currentGasPrice, 9)} Gwei`);
-        
-        // Enhanced gas price calculation (same as other functions)
-        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
-        let adjustedGasPrice = currentGasPrice.lt(minGasPrice) ? 
-            minGasPrice.mul(5) : currentGasPrice.mul(120).div(100); // 5x minimum or 20% boost
-        
-        console.log(`Using adjusted gas price: ${ethers.utils.formatUnits(adjustedGasPrice, 9)} Gwei`);
-        
-        // Use a more reasonable gas limit
-        let estimatedGasLimit;
-        try {
-            estimatedGasLimit = await multicallContract.estimateGas.executeMultiSwap(swapDetails, {
-                value: totalSwapAmount,
-                from: connectedNewWallet.address
-            });
-            console.log(`Estimated gas limit: ${estimatedGasLimit.toString()}`);
-            
-            // Add 20% buffer to gas limit
-            estimatedGasLimit = estimatedGasLimit.mul(120).div(100);
-        } catch (gasError) {
-            console.log("Gas estimation failed, using conservative fallback");
-            estimatedGasLimit = ethers.BigNumber.from("300000");
-        }
-        
-        // Calculate total transaction cost
-        const totalGasCost = adjustedGasPrice.mul(estimatedGasLimit);
-        const totalTxCost = totalSwapAmount.add(totalGasCost);
-        const totalGasCostETH = ethers.utils.formatUnits(totalGasCost, 18);
-        
-        console.log(`Gas limit with buffer: ${estimatedGasLimit.toString()}`);
-        console.log(`Total gas cost: ${totalGasCostETH} ETH`);
-        console.log(`Total tx cost: ${ethers.utils.formatUnits(totalTxCost, 18)} ETH`);
-        console.log(`Wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
-        
-        // Check swap gas cost against gasMax
-        if (totalGasCost.gt(gasMaxWei)) {
-            console.log(`❌ Swap gas cost ${totalGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
-            console.log(`⚠️  Skipping swap but recovering ETH`);
-            
-            // Skip swap but continue to ETH recovery
-            await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
-            
-            console.log(`🔄 Waiting ${cycleDelay}ms before retrying...`);
-            await sleep(cycleDelay);
-            return createWalletAndMultiSmall(multiTokens, cycleDelay, fundingAmount);
-        }
-        
-        // Verify we have enough balance
-        if (currentBalance.lt(totalTxCost)) {
-            // Even with 10 wei per token, check if we have enough for gas
-            if (currentBalance.lt(totalGasCost.add(totalSwapAmount))) {
-                throw new Error(`Insufficient funds. Need ${ethers.utils.formatUnits(totalTxCost, 18)} ETH but have ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
-            }
-            
-            console.log(`Warning: Very tight on funds but should work with 10 wei per token`);
-        }
-        
-        console.log(`✅ Swap gas cost within limits, proceeding...`);
-        
-        // Get nonce for swap transaction
         const swapNonce = await connectedNewWallet.getTransactionCount("pending");
         
-        // Execute the multi-swap transaction
-        const swapTransaction = await multicallContract.executeMultiSwap(swapDetails, {
+        const swapTransactionSent = await multicallContract.executeMultiSwap(swapDetails, {
             value: totalSwapAmount,
-            gasLimit: estimatedGasLimit,
-            gasPrice: adjustedGasPrice,
+            gasLimit: swapGasAnalysis.gasDetails.bufferedGasLimit,
+            gasPrice: swapGasAnalysis.gasDetails.adjustedGasPrice,
             nonce: swapNonce
         });
         
-        console.log(`Swap transaction sent: ${swapTransaction.hash}`);
+        console.log(`Swap transaction sent: ${swapTransactionSent.hash}`);
         
         // Wait for the swap transaction to be mined
-        const swapReceipt = await swapTransaction.wait();
-        
+        const swapReceipt = await swapTransactionSent.wait();
+        let swapGasEfficiency
         let swapSuccess = false;
         if (swapReceipt && swapReceipt.status === 1) {
-            const actualSwapGasCost = adjustedGasPrice.mul(swapReceipt.gasUsed);
+            const actualSwapGasCost = swapGasAnalysis.gasDetails.adjustedGasPrice.mul(swapReceipt.gasUsed);
             const actualSwapGasCostETH = ethers.utils.formatUnits(actualSwapGasCost, 18);
-            const swapGasEfficiency = ((swapReceipt.gasUsed.toNumber() / estimatedGasLimit.toNumber()) * 100).toFixed(1);
+            swapGasEfficiency = ((swapReceipt.gasUsed.toNumber() / swapGasAnalysis.gasDetails.bufferedGasLimit.toNumber()) * 100).toFixed(1);
             
             console.log(`✅ Multi-swap successful: ${swapReceipt.transactionHash}`);
-            console.log(`⛽ Gas used: ${swapReceipt.gasUsed.toString()} (estimated: ${estimatedGasLimit.toString()})`);
-            console.log(`💰 Actual gas cost: ${actualSwapGasCostETH} ETH (estimated: ${totalGasCostETH} ETH)`);
+            console.log(`⛽ Gas used: ${swapReceipt.gasUsed.toString()} (estimated: ${swapGasAnalysis.gasDetails.bufferedGasLimit.toString()})`);
+            console.log(`💰 Actual gas cost: ${actualSwapGasCostETH} ETH (estimated: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH)`);
             console.log(`📊 Gas efficiency: ${swapGasEfficiency}%`);
             console.log(`🎯 Swapped ${numberOfTokens} tokens successfully`);
             swapSuccess = true;
         } else {
-            console.log(`❌ Multi-swap failed: ${swapReceipt?.transactionHash || swapTransaction.hash}`);
+            console.log(`❌ Multi-swap failed: ${swapReceipt?.transactionHash || swapTransactionSent.hash}`);
         }
         
-        // Step 4: Send remaining ETH back to main wallet
+        // Step 8: Send remaining ETH back to main wallet
+        console.log(`\n💸 === ETH RECOVERY ===`);
         console.log(`Transferring remaining ETH back to main wallet...`);
         
         // Wait for balance to update
         await sleep(1000);
         
         // Send ETH back to main wallet
-        await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
+        await sendETHBack(newWallet.privateKey, mainSigner.address, fundingAmountWei);
         
-        // Final balances
+        // Final balances and summary
         const finalMainBalance = await provider.getBalance(mainSigner.address);
         const finalNewWalletBalance = await provider.getBalance(connectedNewWallet.address);
         
+        console.log(`\n📊 === CYCLE SUMMARY ===`);
         console.log(`Final main wallet balance: ${ethers.utils.formatUnits(finalMainBalance, 18)} ETH`);
         console.log(`Final new wallet balance: ${ethers.utils.formatUnits(finalNewWalletBalance, 18)} ETH`);
         
+        const totalActualGasCost = parseFloat(actualFundingGasCostETH) + (swapSuccess ? parseFloat(ethers.utils.formatUnits(swapGasAnalysis.gasDetails.adjustedGasPrice.mul(swapReceipt.gasUsed), 18)) : 0);
+        console.log(`💰 Total actual gas cost: ${totalActualGasCost.toFixed(8)} ETH`);
+        
         const result = {
             success: swapSuccess,
+            swapType: 'V2',
             newWalletAddress: newWallet.address,
             newWalletPrivateKey: newWallet.privateKey,
-            swapTxHash: swapReceipt?.transactionHash || swapTransaction.hash,
-            fundingTxHash: fundingTransaction.hash,
+            swapTxHash: swapReceipt?.transactionHash || swapTransactionSent.hash,
+            fundingTxHash: fundingTransactionSent.hash,
             actualFundingGasCost: actualFundingGasCostETH,
-            actualSwapGasCost: swapSuccess ? ethers.utils.formatUnits(adjustedGasPrice.mul(swapReceipt.gasUsed), 18) : '0',
-            tokensSwapped: numberOfTokens
+            actualSwapGasCost: swapSuccess ? ethers.utils.formatUnits(swapGasAnalysis.gasDetails.adjustedGasPrice.mul(swapReceipt.gasUsed), 18) : '0',
+            tokensSwapped: numberOfTokens,
+            totalGasCost: totalActualGasCost.toFixed(8),
+            gasAnalysis: {
+                fundingAnalysis: {
+                    estimated: fundingGasAnalysis.gasDetails.estimatedGasCostETH,
+                    actual: actualFundingGasCostETH,
+                    efficiency: fundingGasEfficiency
+                },
+                swapAnalysis: {
+                    estimated: swapGasAnalysis.gasDetails.estimatedGasCostETH,
+                    actual: swapSuccess ? ethers.utils.formatUnits(swapGasAnalysis.gasDetails.adjustedGasPrice.mul(swapReceipt.gasUsed), 18) : '0',
+                    efficiency: swapSuccess ? swapGasEfficiency : '0'
+                }
+            }
         };
         
-        console.log('Result:', result);
-        console.log(`🔄 Cycle completed. Starting next cycle in ${cycleDelay}ms...`);
+        console.log('V2 Result:', result);
         
-        // Configurable delay before next cycle
+        // Use gas-aware delay for next cycle
+        console.log(`\n⏱️  Calculating gas-aware delay for next cycle...`);
+        console.log(`🔄 V2 Cycle completed. Starting next cycle in ${cycleDelay}ms...`);
+        
+        // Gas-aware delay before next cycle
         await sleep(cycleDelay);
         
         // Recursively call the function to continue the loop
@@ -2618,22 +2933,23 @@ async function createWalletAndMultiSmall(multiTokens, cycleDelay = 2000, funding
         
     } catch (err) {
         console.error(`Error in createWalletAndMultiSmall:`, err.message);
-        console.log(`🔄 Error occurred. Attempting to recover ETH...`);
+        console.log(`🔄 V2 Error occurred. Attempting to recover ETH...`);
         
         // Try to send ETH back to main wallet even if there was an error
         if (provider && mainSigner && newWallet) {
             try {
                 await sendETHBack(newWallet.privateKey, mainSigner.address);
-                console.log(`✅ ETH successfully recovered after error`);
+                console.log(`✅ ETH successfully recovered after V2 error`);
             } catch (recoveryError) {
-                console.error(`❌ Failed to recover ETH after error:`, recoveryError.message);
+                console.error(`❌ Failed to recover ETH after V2 error:`, recoveryError.message);
             }
         }
         
-        console.log(`🔄 Retrying in ${Math.max(cycleDelay, 5000)}ms...`);
+        // Use gas-aware delay for retry after error
+        console.log(`🔄 Retrying V2 in ${cycleDelay}ms...`);
         
-        // Wait before retrying (use longer delay on error)
-        await sleep(Math.max(cycleDelay, 5000));
+        // Wait before retrying with gas-adjusted delay
+        await sleep(cycleDelay);
         
         // Continue the loop even if there was an error
         return createWalletAndMultiSmall(multiTokens, cycleDelay, fundingAmount);
@@ -2650,80 +2966,132 @@ async function createWalletAndMultiSmallV3(multiTokens, cycleDelay = 2000, fundi
     console.log(`Funding amount: ${fundingAmount} ETH`);
     console.log(`Cycle delay: ${cycleDelay}ms`);
     console.log(`Using V3 swaps only`);
-    
-    // Get gas max limit from config
-    const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
-        config.gasSettings.gasMax : 
-        config.gasSettings.gasMax.toString();
-    const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
-    console.log(`Gas max limit: ${gasMaxETH} ETH`);
 
     try {
         mainSigner = new ethers.Wallet(config.fundingPrivateKey, provider);
-        console.log("Main wallet:", mainSigner.address);
-
-        // Step 1: Create a random new wallet
         connectedNewWallet = newWallet.connect(provider);
         
+        console.log("Main wallet:", mainSigner.address);
         console.log(`Created new V3 wallet: ${newWallet.address} ${newWallet.privateKey}`);
 
         savePrivateKey([
             newWallet.address,
             newWallet.privateKey
-        ])
+        ]);
         
-        // Step 2: Fund the new wallet from main signer
+        // Step 1: Check main signer balance first
         const fundingAmountWei = ethers.utils.parseUnits(fundingAmount, 18);
-        
-        // Check main signer balance
         const mainBalance = await provider.getBalance(mainSigner.address);
         if (mainBalance.lt(fundingAmountWei)) {
             throw new Error(`Insufficient balance in main wallet. Need ${fundingAmount} ETH, have ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
         }
         
-        console.log(`Funding new V3 wallet with ${fundingAmount} ETH...`);
+        // Step 2: ANALYZE V3 SWAP TRANSACTION FIRST (most expensive operation)
+        console.log(`\n🔍 === ANALYZING V3 SWAP TRANSACTION FIRST ===`);
         
-        // Prepare funding transaction
-        const fundingTx = {
+        // Prepare V3 swap parameters without funding the wallet yet
+        const tokensToSwap = multiTokens || defaultTokens["V3"] || [
+            "0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9", //BONK
+        ];
+        const numberOfTokens = tokensToSwap.length;
+        console.log(`Number of V3 tokens to analyze for swap: ${numberOfTokens}`);
+        
+        // Use minimal amounts for analysis
+        const amountPerToken = ethers.BigNumber.from("10"); // 10 wei per token
+        const totalSwapAmount = amountPerToken.mul(numberOfTokens);
+        
+        // V3 fee tiers (in basis points: 500 = 0.05%, 3000 = 0.3%, 10000 = 1%)
+        const defaultV3Fee = config.defaultV3Fee || 10000; // 1% fee tier as default
+        const v3Fee = Array.isArray(defaultV3Fee) ? defaultV3Fee[0] : defaultV3Fee;
+        
+        console.log(`Analyzing V3 swap for ${totalSwapAmount.toString()} wei total (${ethers.utils.formatUnits(totalSwapAmount, 18)} ETH)`);
+        console.log(`V3 Fee tier: ${v3Fee} (${(v3Fee / 10000)}%)`);
+        
+        // Create V3 swap details for analysis
+        const swapDetails = tokensToSwap.map(tokenAddress => ({
+            tokenAddress: tokenAddress,    // address tokenAddress
+            ethAmount: amountPerToken,     // uint256 ethAmount  
+            recipient: connectedNewWallet.address, // address recipient (even though not funded yet)
+            fee: v3Fee,                    // uint24 fee (V3 fee tier)
+            minAmountOut: 0                // uint256 minAmountOut (no slippage protection)
+        }));
+
+        // Create contract interface for analysis (don't need to fund wallet yet)
+        const multicallV3Interface = new ethers.utils.Interface(multicallAbi);
+        
+        // CREATE THE ACTUAL V3 SWAP TRANSACTION OBJECT FOR ANALYSIS
+        const swapTransaction = {
+            to: contracts.multicallSwapV3,
+            data: multicallV3Interface.encodeFunctionData("executeMultiSwapV3", [swapDetails]),
+            value: totalSwapAmount
+        };
+        
+        console.log(`Pre-analyzing V3 multi-swap transaction for ${numberOfTokens} tokens...`);
+        console.log(`V3 Contract: ${contracts.multicallSwapV3}`);
+        
+        const swapGasAnalysis = await analyzeTransactionGas(
+            swapTransaction,
+            mainSigner, // This will check gas estimation (wallet doesn't need balance for gas estimation)
+            'V3_MULTISWAP',
+            1.2
+        );
+        
+        // CHECK V3 SWAP VIABILITY BEFORE FUNDING
+        if (swapGasAnalysis.recommendation === 'ABORT_HIGH_GAS') {
+            console.log(`❌ V3 Swap transaction would be too expensive: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+            console.log(`⚠️  Aborting entire V3 cycle - no funding needed`);
+            console.log(`⏱️  Waiting ${swapGasAnalysis.timing.suggestedRetryTime}ms before retry...`);
+            await sleep(swapGasAnalysis.timing.suggestedRetryTime);
+            return createWalletAndMultiSmallV3(multiTokens, cycleDelay, fundingAmount);
+        }
+        
+        console.log(`✅ V3 Swap analysis passed - estimated cost: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+        console.log(`📊 V3 Swap gas recommendation: ${swapGasAnalysis.recommendation}`);
+        
+        // Step 3: ANALYZE FUNDING TRANSACTION (only after V3 swap passes)
+        console.log(`\n🔍 === ANALYZING FUNDING TRANSACTION ===`);
+        
+        const fundingTransaction = {
             to: newWallet.address,
             value: fundingAmountWei
         };
         
-        // Get gas estimates with fallback
-        let fundingGasLimit, fundingGasPrice;
-        try {
-            // Try to use getGasEstimates if it exists
-            if (typeof getGasEstimates === 'function') {
-                const gasEstimates = await getGasEstimates(fundingTx, { provider: mainSigner });
-                fundingGasLimit = gasEstimates.gasLimit;
-                fundingGasPrice = gasEstimates.gasPrice;
-            } else {
-                throw new Error("getGasEstimates not available");
-            }
-        } catch (gasError) {
-            console.log("Using fallback gas estimation for V3 funding");
-            const baseGasPrice = await provider.getGasPrice();
-            fundingGasPrice = baseGasPrice.mul(120).div(100); // 20% boost
-            fundingGasLimit = 21000;
-        }
+        const fundingGasAnalysis = await analyzeTransactionGas(
+            fundingTransaction,
+            mainSigner,
+            'V3_FUNDING',
+            1.2
+        );
         
-        // Check funding transaction gas cost against gasMax
-        const fundingGasCost = fundingGasPrice.mul(fundingGasLimit);
-        const fundingGasCostETH = ethers.utils.formatUnits(fundingGasCost, 18);
-        
-        console.log(`V3 Funding gas cost: ${fundingGasCostETH} ETH`);
-        
-        if (fundingGasCost.gt(gasMaxWei)) {
-            console.log(`❌ V3 Funding gas cost ${fundingGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
-            console.log(`⚠️  Skipping this V3 cycle due to high gas costs`);
-            
-            // Wait and retry
-            console.log(`🔄 Waiting ${cycleDelay}ms before retrying V3...`);
-            await sleep(cycleDelay);
+        if (fundingGasAnalysis.recommendation === 'ABORT_HIGH_GAS' || 
+            fundingGasAnalysis.recommendation === 'ABORT_INSUFFICIENT_BALANCE') {
+            console.log(`❌ V3 Funding transaction aborted: ${fundingGasAnalysis.recommendation}`);
+            console.log(`⏱️  Waiting ${fundingGasAnalysis.timing.suggestedRetryTime}ms before retry...`);
+            await sleep(fundingGasAnalysis.timing.suggestedRetryTime);
             return createWalletAndMultiSmallV3(multiTokens, cycleDelay, fundingAmount);
         }
         
-        // Get nonce with fallback
+        console.log(`✅ V3 Funding analysis passed - estimated cost: ${fundingGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+
+        // Step 4: Apply any recommended wait times from both analyses
+        const maxWaitTime = Math.max(
+            fundingGasAnalysis.timing.waitTime || 0,
+            swapGasAnalysis.timing.waitTime || 0
+        );
+        
+        if (maxWaitTime > 0) {
+            console.log(`⏱️  Gas conditions require ${maxWaitTime}ms pause before proceeding...`);
+            await sleep(maxWaitTime);
+        }
+        
+        console.log(`\n📊 === V3 PRE-FLIGHT SUMMARY ===`);
+        console.log(`💰 Total estimated costs:`);
+        console.log(`   • Funding: ${fundingGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+        console.log(`   • V3 Swap: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+        console.log(`   • Total gas: ${(parseFloat(fundingGasAnalysis.gasDetails.estimatedGasCostETH) + parseFloat(swapGasAnalysis.gasDetails.estimatedGasCostETH)).toFixed(8)} ETH`);
+        console.log(`✅ Both V3 operations approved - proceeding with funding...`);
+        
+        // Step 5: Execute funding with analyzed gas parameters (only after both checks pass)
         let fundingNonce;
         try {
             if (typeof getNonce === 'function') {
@@ -2735,47 +3103,28 @@ async function createWalletAndMultiSmallV3(multiTokens, cycleDelay = 2000, fundi
             fundingNonce = await mainSigner.getTransactionCount("pending");
         }
         
-        console.log(`✅ V3 Funding gas cost within limits, proceeding...`);
-        console.log(`V3 Funding gas price: ${ethers.utils.formatUnits(fundingGasPrice, 9)} Gwei`);
-        
-        // Send funding transaction
-        const fundingTransaction = await mainSigner.sendTransaction({
-            ...fundingTx,
-            gasLimit: fundingGasLimit,
-            gasPrice: fundingGasPrice,
+        console.log(`\n💸 === EXECUTING V3 FUNDING ===`);
+        const fundingTransactionSent = await mainSigner.sendTransaction({
+            ...fundingTransaction,
+            gasLimit: fundingGasAnalysis.gasDetails.bufferedGasLimit,
+            gasPrice: fundingGasAnalysis.gasDetails.adjustedGasPrice,
             nonce: fundingNonce
         });
         
-        console.log(`V3 Funding transaction sent: ${fundingTransaction.hash}`);
-        const fundingReceipt = await fundingTransaction.wait();
+        console.log(`V3 Funding transaction sent: ${fundingTransactionSent.hash}`);
+        const fundingReceipt = await fundingTransactionSent.wait();
         
-        // Log actual funding gas usage
-        const actualFundingGasCost = fundingGasPrice.mul(fundingReceipt.gasUsed);
+        // Log actual funding results vs analysis
+        const actualFundingGasCost = fundingGasAnalysis.gasDetails.adjustedGasPrice.mul(fundingReceipt.gasUsed);
         const actualFundingGasCostETH = ethers.utils.formatUnits(actualFundingGasCost, 18);
+        const fundingGasEfficiency = ((fundingReceipt.gasUsed.toNumber() / fundingGasAnalysis.gasDetails.bufferedGasLimit.toNumber()) * 100).toFixed(1);
+        
         console.log(`✅ V3 Funding successful - Actual gas cost: ${actualFundingGasCostETH} ETH`);
+        console.log(`📊 V3 Funding efficiency: ${fundingGasEfficiency}% (used ${fundingReceipt.gasUsed.toString()} of ${fundingGasAnalysis.gasDetails.bufferedGasLimit.toString()})`);
         
-        // Verify funding
-        const newWalletBalance = await provider.getBalance(connectedNewWallet.address);
-        console.log(`New V3 wallet balance: ${ethers.utils.formatUnits(newWalletBalance, 18)} ETH`);
-        
-        // Step 3: Execute V3 swap using the new wallet with your custom V3 contract
-        console.log(`Executing V3 multi-swap from new wallet...`);
-
-        // Initialize your custom V3 contract with the NEW WALLET
-        const multicallV3Contract = new ethers.Contract(contracts.multicallSwapV3, multicallAbi, connectedNewWallet);
-        
-        // Define the V3 token addresses you want to swap
-        const tokensToSwap = multiTokens || defaultTokens["V3"] || [
-            "0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9", //BONK
-        ];
-        
-        const numberOfTokens = tokensToSwap.length;
-        console.log(`Number of V3 tokens to swap: ${numberOfTokens}`);
-        console.log(`V3 Tokens: ${tokensToSwap.slice(0, 3).join(', ')}${tokensToSwap.length > 3 ? '...' : ''}`);
-        
-        // Calculate available balance for swapping (reserve gas)
+        // Step 6: Wait for balance to update and verify
         let currentBalance = await provider.getBalance(connectedNewWallet.address);
-        console.log(`Current V3 wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+        console.log(`New V3 wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
 
         await new Promise(async (resolve, reject) => {
             let indexETH = 0;
@@ -2788,162 +3137,87 @@ async function createWalletAndMultiSmallV3(multiTokens, cycleDelay = 2000, fundi
                 }
                 
                 if(currentBalance.gt(0)){
-                    console.log('V3 Balance loaded, proceeding with swaps...');
-                    resolve()
+                    console.log('V3 Balance loaded, proceeding with pre-analyzed swap...');
+                    resolve();
+                } else {
+                    reject(new Error("V3 Balance never updated"));
                 }
             } catch(err) {
                 console.warn('V3 Error', err?.message);
-                await sendETHBack(connectedNewWallet.privateKey, mainSigner.address)
+                await sendETHBack(connectedNewWallet.privateKey, mainSigner.address);
                 reject(err);
             }
-        })
+        });
 
-        // Reserve ETH for gas costs (V3 needs slightly more gas)
-        const gasReserve = ethers.utils.parseUnits("0.000003", 18); // Slightly higher for V3
-        const availableForSwap = currentBalance.sub(gasReserve);
+        // Step 7: Execute V3 swap with pre-analyzed gas parameters
+        console.log(`\n🔄 === EXECUTING PRE-ANALYZED V3 SWAP ===`);
         
-        if (availableForSwap.lte(0)) {
-            throw new Error(`Insufficient balance for V3 swap after gas reserve. Balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH, Gas reserve: ${ethers.utils.formatUnits(gasReserve, 18)} ETH`);
-        }
+        // Create the actual V3 contract instance now that wallet is funded
+        const multicallV3Contract = new ethers.Contract(contracts.multicallSwapV3, multicallAbi, connectedNewWallet);
         
-        // Split available amount equally between all tokens - USE 10 WEI PER TOKEN
-        let amountPerToken = ethers.BigNumber.from("10"); // 10 wei per token
-        let totalSwapAmount = amountPerToken.mul(numberOfTokens);
+        console.log(`Executing V3 multi-swap with pre-analyzed parameters:`);
+        console.log(`   • Gas limit: ${swapGasAnalysis.gasDetails.bufferedGasLimit.toString()}`);
+        console.log(`   • Gas price: ${ethers.utils.formatUnits(swapGasAnalysis.gasDetails.adjustedGasPrice, 9)} Gwei`);
+        console.log(`   • Estimated cost: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH`);
+        console.log(`   • V3 Fee tier: ${v3Fee} basis points`);
         
-        // V3 fee tiers (in basis points: 500 = 0.05%, 3000 = 0.3%, 10000 = 1%)
-        const defaultV3Fee = config.defaultV3Fee || 10000; // 1% fee tier as default
-        const v3Fee = Array.isArray(defaultV3Fee) ? defaultV3Fee[0] : defaultV3Fee;
-        
-        console.log(`Available for V3 swap: ${ethers.utils.formatUnits(availableForSwap, 18)} ETH`);
+        console.log(`Available for V3 swap: ${ethers.utils.formatUnits(currentBalance.sub(swapGasAnalysis.gasDetails.estimatedGasCost), 18)} ETH`);
         console.log(`Amount per V3 token: ${amountPerToken.toString()} wei (${ethers.utils.formatUnits(amountPerToken, 18)} ETH)`);
         console.log(`Total V3 swap amount: ${totalSwapAmount.toString()} wei (${ethers.utils.formatUnits(totalSwapAmount, 18)} ETH)`);
-        console.log(`V3 Fee tier: ${v3Fee} (${(v3Fee / 10000)}%)`);
         
-        // Create V3 swap details for all tokens (matching SwapDetailsV3 struct)
-        let swapDetails = tokensToSwap.map(tokenAddress => ({
-            tokenAddress: tokenAddress,    // address tokenAddress
-            ethAmount: amountPerToken,     // uint256 ethAmount  
-            recipient: connectedNewWallet.address, // address recipient
-            fee: v3Fee,                    // uint24 fee (V3 fee tier)
-            minAmountOut: 0                // uint256 minAmountOut (no slippage protection)
-        }));
-
-        console.log(`Swapping ${amountPerToken.toString()} wei for each of ${numberOfTokens} V3 tokens...`);
-        console.log(`Using V3 fee tier: ${v3Fee} basis points`);
-        
-        // Get gas price and estimate more conservatively for V3
-        const currentGasPrice = await provider.getGasPrice();
-        console.log(`Current V3 gas price: ${ethers.utils.formatUnits(currentGasPrice, 9)} Gwei`);
-        
-        // Enhanced gas price calculation (same as other functions)
-        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
-        let adjustedGasPrice = currentGasPrice.lt(minGasPrice) ? 
-            minGasPrice.mul(5) : currentGasPrice.mul(120).div(100); // 5x minimum or 20% boost
-        
-        console.log(`Using adjusted V3 gas price: ${ethers.utils.formatUnits(adjustedGasPrice, 9)} Gwei`);
-        
-        // Use a more reasonable gas limit for V3 (typically higher than V2)
-        let estimatedGasLimit;
-        try {
-            estimatedGasLimit = await multicallV3Contract.estimateGas.executeMultiSwapV3(swapDetails, {
-                value: totalSwapAmount,
-                from: connectedNewWallet.address
-            });
-            console.log(`Estimated V3 gas limit: ${estimatedGasLimit.toString()}`);
-            
-            // Add 20% buffer to gas limit
-            estimatedGasLimit = estimatedGasLimit.mul(120).div(100);
-        } catch (gasError) {
-            console.log("V3 Gas estimation failed, using conservative fallback");
-            // V3 swaps typically need more gas than V2
-            estimatedGasLimit = ethers.BigNumber.from("400000").add(
-                ethers.BigNumber.from("80000").mul(Math.max(0, numberOfTokens - 1))
-            );
-        }
-        
-        // Calculate total transaction cost
-        const totalGasCost = adjustedGasPrice.mul(estimatedGasLimit);
-        const totalTxCost = totalSwapAmount.add(totalGasCost);
-        const totalGasCostETH = ethers.utils.formatUnits(totalGasCost, 18);
-        
-        console.log(`V3 Gas limit with buffer: ${estimatedGasLimit.toString()}`);
-        console.log(`Total V3 gas cost: ${totalGasCostETH} ETH`);
-        console.log(`Total V3 tx cost: ${ethers.utils.formatUnits(totalTxCost, 18)} ETH`);
-        console.log(`V3 Wallet balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
-        
-        // Check swap gas cost against gasMax
-        if (totalGasCost.gt(gasMaxWei)) {
-            console.log(`❌ V3 Swap gas cost ${totalGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
-            console.log(`⚠️  Skipping V3 swap but recovering ETH`);
-            
-            // Skip swap but continue to ETH recovery
-            await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
-            
-            console.log(`🔄 Waiting ${cycleDelay}ms before retrying V3...`);
-            await sleep(cycleDelay);
-            return createWalletAndMultiSmallV3(multiTokens, cycleDelay, fundingAmount);
-        }
-        
-        // Verify we have enough balance
-        if (currentBalance.lt(totalTxCost)) {
-            // Even with 10 wei per token, check if we have enough for gas
-            if (currentBalance.lt(totalGasCost.add(totalSwapAmount))) {
-                throw new Error(`Insufficient funds for V3. Need ${ethers.utils.formatUnits(totalTxCost, 18)} ETH but have ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
-            }
-            
-            console.log(`Warning: Very tight on funds but should work with 10 wei per V3 token`);
-        }
-        
-        console.log(`✅ V3 Swap gas cost within limits, proceeding...`);
-        
-        // Get nonce for swap transaction
         const swapNonce = await connectedNewWallet.getTransactionCount("pending");
         
-        // Execute the V3 multi-swap transaction (CORRECT FUNCTION CALL)
-        const swapTransaction = await multicallV3Contract.executeMultiSwapV3(swapDetails, {
+        // Execute the V3 multi-swap transaction with pre-analyzed parameters
+        const swapTransactionSent = await multicallV3Contract.executeMultiSwapV3(swapDetails, {
             value: totalSwapAmount,
-            gasLimit: estimatedGasLimit,
-            gasPrice: adjustedGasPrice,
+            gasLimit: swapGasAnalysis.gasDetails.bufferedGasLimit,
+            gasPrice: swapGasAnalysis.gasDetails.adjustedGasPrice,
             nonce: swapNonce
         });
         
-        console.log(`V3 Swap transaction sent: ${swapTransaction.hash}`);
+        console.log(`V3 Swap transaction sent: ${swapTransactionSent.hash}`);
         
-        // Wait for the swap transaction to be mined
-        const swapReceipt = await swapTransaction.wait();
-        
+        // Wait for the V3 swap transaction to be mined
+        const swapReceipt = await swapTransactionSent.wait();
+        let swapGasEfficiency;
         let swapSuccess = false;
+        
         if (swapReceipt && swapReceipt.status === 1) {
-            const actualSwapGasCost = adjustedGasPrice.mul(swapReceipt.gasUsed);
+            const actualSwapGasCost = swapGasAnalysis.gasDetails.adjustedGasPrice.mul(swapReceipt.gasUsed);
             const actualSwapGasCostETH = ethers.utils.formatUnits(actualSwapGasCost, 18);
-            const swapGasEfficiency = ((swapReceipt.gasUsed.toNumber() / estimatedGasLimit.toNumber()) * 100).toFixed(1);
+            swapGasEfficiency = ((swapReceipt.gasUsed.toNumber() / swapGasAnalysis.gasDetails.bufferedGasLimit.toNumber()) * 100).toFixed(1);
             
             console.log(`✅ V3 Multi-swap successful: ${swapReceipt.transactionHash}`);
-            console.log(`⛽ Gas used: ${swapReceipt.gasUsed.toString()} (estimated: ${estimatedGasLimit.toString()})`);
-            console.log(`💰 Actual gas cost: ${actualSwapGasCostETH} ETH (estimated: ${totalGasCostETH} ETH)`);
+            console.log(`⛽ Gas used: ${swapReceipt.gasUsed.toString()} (estimated: ${swapGasAnalysis.gasDetails.bufferedGasLimit.toString()})`);
+            console.log(`💰 Actual gas cost: ${actualSwapGasCostETH} ETH (estimated: ${swapGasAnalysis.gasDetails.estimatedGasCostETH} ETH)`);
             console.log(`📊 Gas efficiency: ${swapGasEfficiency}%`);
             console.log(`🎯 Swapped ${numberOfTokens} V3 tokens successfully`);
             console.log(`💎 V3 Fee tier used: ${v3Fee} basis points`);
             swapSuccess = true;
         } else {
-            console.log(`❌ V3 Multi-swap failed: ${swapReceipt?.transactionHash || swapTransaction.hash}`);
+            console.log(`❌ V3 Multi-swap failed: ${swapReceipt?.transactionHash || swapTransactionSent.hash}`);
         }
         
-        // Step 4: Send remaining ETH back to main wallet
+        // Step 8: Send remaining ETH back to main wallet
+        console.log(`\n💸 === V3 ETH RECOVERY ===`);
         console.log(`Transferring remaining ETH back to main wallet from V3 wallet...`);
         
         // Wait for balance to update
         await sleep(1000);
         
         // Send ETH back to main wallet
-        await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
+        await sendETHBack(newWallet.privateKey, mainSigner.address, fundingAmountWei);
         
-        // Final balances
+        // Final balances and summary
         const finalMainBalance = await provider.getBalance(mainSigner.address);
         const finalNewWalletBalance = await provider.getBalance(connectedNewWallet.address);
         
+        console.log(`\n📊 === V3 CYCLE SUMMARY ===`);
         console.log(`Final main wallet balance: ${ethers.utils.formatUnits(finalMainBalance, 18)} ETH`);
         console.log(`Final V3 wallet balance: ${ethers.utils.formatUnits(finalNewWalletBalance, 18)} ETH`);
+        
+        const totalActualGasCost = parseFloat(actualFundingGasCostETH) + (swapSuccess ? parseFloat(ethers.utils.formatUnits(swapGasAnalysis.gasDetails.adjustedGasPrice.mul(swapReceipt.gasUsed), 18)) : 0);
+        console.log(`💰 Total actual V3 gas cost: ${totalActualGasCost.toFixed(8)} ETH`);
         
         const result = {
             success: swapSuccess,
@@ -2951,17 +3225,32 @@ async function createWalletAndMultiSmallV3(multiTokens, cycleDelay = 2000, fundi
             feeTier: v3Fee,
             newWalletAddress: newWallet.address,
             newWalletPrivateKey: newWallet.privateKey,
-            swapTxHash: swapReceipt?.transactionHash || swapTransaction.hash,
-            fundingTxHash: fundingTransaction.hash,
+            swapTxHash: swapReceipt?.transactionHash || swapTransactionSent.hash,
+            fundingTxHash: fundingTransactionSent.hash,
             actualFundingGasCost: actualFundingGasCostETH,
-            actualSwapGasCost: swapSuccess ? ethers.utils.formatUnits(adjustedGasPrice.mul(swapReceipt.gasUsed), 18) : '0',
-            tokensSwapped: numberOfTokens
+            actualSwapGasCost: swapSuccess ? ethers.utils.formatUnits(swapGasAnalysis.gasDetails.adjustedGasPrice.mul(swapReceipt.gasUsed), 18) : '0',
+            tokensSwapped: numberOfTokens,
+            totalGasCost: totalActualGasCost.toFixed(8),
+            gasAnalysis: {
+                fundingAnalysis: {
+                    estimated: fundingGasAnalysis.gasDetails.estimatedGasCostETH,
+                    actual: actualFundingGasCostETH,
+                    efficiency: fundingGasEfficiency
+                },
+                swapAnalysis: {
+                    estimated: swapGasAnalysis.gasDetails.estimatedGasCostETH,
+                    actual: swapSuccess ? ethers.utils.formatUnits(swapGasAnalysis.gasDetails.adjustedGasPrice.mul(swapReceipt.gasUsed), 18) : '0',
+                    efficiency: swapSuccess ? swapGasEfficiency : '0'
+                }
+            }
         };
         
         console.log('V3 Result:', result);
-        console.log(`🔄 V3 Cycle completed. Starting next V3 cycle in ${cycleDelay}ms...`);
         
-        // Configurable delay before next cycle
+        // Use your cycleDelay (keeping your updates)
+        console.log(`\n⏱️  V3 Cycle completed. Starting next V3 cycle in ${cycleDelay}ms...`);
+        
+        // Wait before next cycle
         await sleep(cycleDelay);
         
         // Recursively call the function to continue the V3 loop
@@ -2981,10 +3270,11 @@ async function createWalletAndMultiSmallV3(multiTokens, cycleDelay = 2000, fundi
             }
         }
         
-        console.log(`🔄 Retrying V3 in ${Math.max(cycleDelay, 5000)}ms...`);
+        // Use your cycle delay for retry (keeping your updates)
+        console.log(`🔄 Retrying V3 in ${cycleDelay}ms...`);
         
-        // Wait before retrying (use longer delay on error)
-        await sleep(Math.max(cycleDelay, 5000));
+        // Wait before retrying
+        await sleep(cycleDelay);
         
         // Continue the V3 loop even if there was an error
         return createWalletAndMultiSmallV3(multiTokens, cycleDelay, fundingAmount);
@@ -4722,6 +5012,7 @@ DEFAULT TOKENS V3:
 async function main() {
     const command = process.argv[2];
     const args = process.argv.slice(3);
+
 
     if (command === 'help' || command === '--help' || command === '-h') {
         showHelp();
