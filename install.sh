@@ -558,6 +558,7 @@ create_env_template() {
     echo ""
     
     local rpc_choice
+    local rpc_url=""
     while true; do
         read -p "Enter your choice (1-4): " rpc_choice
         
@@ -572,7 +573,7 @@ create_env_template() {
                 while true; do
                     read -p "Enter your Alchemy API key: " alchemy_key
                     if [[ -n "$alchemy_key" ]]; then
-                        local rpc_url="https://base-mainnet.g.alchemy.com/v2/$alchemy_key"
+                        rpc_url="https://base-mainnet.g.alchemy.com/v2/$alchemy_key"
                         log "✅ Alchemy RPC configured"
                         break 2
                     else
@@ -590,7 +591,7 @@ create_env_template() {
                 while true; do
                     read -p "Enter your Infura project ID: " infura_id
                     if [[ -n "$infura_id" ]]; then
-                        local rpc_url="https://base-mainnet.infura.io/v3/$infura_id"
+                        rpc_url="https://base-mainnet.infura.io/v3/$infura_id"
                         log "✅ Infura RPC configured"
                         break 2
                     else
@@ -608,7 +609,7 @@ create_env_template() {
                 while true; do
                     read -p "Enter your QuickNode URL: " quicknode_url
                     if [[ -n "$quicknode_url" ]]; then
-                        local rpc_url="$quicknode_url"
+                        rpc_url="$quicknode_url"
                         log "✅ QuickNode RPC configured"
                         break 2
                     else
@@ -627,7 +628,7 @@ create_env_template() {
                     if [[ -n "$custom_url" ]]; then
                         # Basic URL validation
                         if [[ $custom_url =~ ^https?:// ]]; then
-                            local rpc_url="$custom_url"
+                            rpc_url="$custom_url"
                             log "✅ Custom RPC configured"
                             break 2
                         else
@@ -645,7 +646,75 @@ create_env_template() {
     done
     
     # Get private key
-    local private_key=$(configure_private_key)
+    echo ""
+    echo -e "${BLUE}📋 Private Key Configuration${NC}"
+    echo "Choose how you want to configure your funding wallet:"
+    echo "1) Import existing private key"
+    echo "2) Generate new private key"
+    echo ""
+    
+    local private_key=""
+    while true; do
+        read -p "Enter your choice (1-2): " pk_choice
+        
+        case $pk_choice in
+            1)
+                echo ""
+                log "🔑 Importing existing private key..."
+                echo -e "${YELLOW}⚠️  WARNING: Make sure you're in a secure environment!${NC}"
+                echo "Your private key will be stored in the .env file."
+                echo ""
+                
+                while true; do
+                    read -s -p "Enter your private key (without 0x prefix): " user_private_key
+                    echo ""
+                    
+                    if [[ -z "$user_private_key" ]]; then
+                        error_log "Private key cannot be empty. Please try again."
+                        continue
+                    fi
+                    
+                    if validate_private_key "$user_private_key"; then
+                        # Remove 0x prefix if present
+                        private_key=${user_private_key#0x}
+                        log "✅ Private key format is valid"
+                        break 2
+                    else
+                        error_log "Invalid private key format. Must be 64 hexadecimal characters."
+                        echo "Please try again or choose option 2 to generate a new key."
+                        echo ""
+                    fi
+                done
+                ;;
+            2)
+                log "🎲 Generating new private key..."
+                local generated_key=$(generate_private_key)
+                
+                if [[ -n "$generated_key" ]] && validate_private_key "$generated_key"; then
+                    echo ""
+                    echo -e "${GREEN}✅ Generated new private key:${NC}"
+                    echo -e "${YELLOW}$generated_key${NC}"
+                    echo ""
+                    echo -e "${RED}⚠️  IMPORTANT: Save this private key securely!${NC}"
+                    echo "This is the only time it will be displayed in plain text."
+                    echo "Make sure to:"
+                    echo "- Copy it to a secure location"
+                    echo "- Fund this wallet with ETH for gas fees"
+                    echo "- Never share this key with anyone"
+                    echo ""
+                    
+                    read -p "Press Enter after you've saved the private key securely..."
+                    private_key="$generated_key"
+                    break
+                else
+                    error_log "Failed to generate private key. Please try again."
+                fi
+                ;;
+            *)
+                error_log "Invalid choice. Please enter 1 or 2."
+                ;;
+        esac
+    done
     
     # Create the .env file
     log "📝 Creating .env file..."
