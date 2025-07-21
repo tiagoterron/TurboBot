@@ -431,10 +431,13 @@ configure_rpc_url() {
     echo -e "${BLUE}🌐 RPC URL Configuration${NC}"
     echo "Choose your RPC provider:"
     echo "1) Alchemy (recommended)"
-    echo "2) Infura"
+    echo "2) Infura" 
     echo "3) QuickNode"
     echo "4) Other/Custom"
     echo ""
+    
+    # Force output flush
+    exec 1>&1
     
     while true; do
         read -p "Enter your choice (1-4): " rpc_choice
@@ -544,8 +547,102 @@ create_env_template() {
     
     log "🔧 Configuring environment variables..."
     
-    # Get RPC URL
-    local rpc_url=$(configure_rpc_url)
+    # Get RPC URL with explicit output
+    echo ""
+    echo -e "${BLUE}🌐 RPC URL Configuration${NC}"
+    echo "Choose your RPC provider:"
+    echo "1) Alchemy (recommended)"
+    echo "2) Infura"
+    echo "3) QuickNode" 
+    echo "4) Other/Custom"
+    echo ""
+    
+    local rpc_choice
+    while true; do
+        read -p "Enter your choice (1-4): " rpc_choice
+        
+        case $rpc_choice in
+            1)
+                echo ""
+                log "🔗 Configuring Alchemy RPC..."
+                echo "Please provide your Alchemy API key."
+                echo "You can get one free at: https://www.alchemy.com"
+                echo ""
+                
+                while true; do
+                    read -p "Enter your Alchemy API key: " alchemy_key
+                    if [[ -n "$alchemy_key" ]]; then
+                        local rpc_url="https://base-mainnet.g.alchemy.com/v2/$alchemy_key"
+                        log "✅ Alchemy RPC configured"
+                        break 2
+                    else
+                        error_log "API key cannot be empty. Please try again."
+                    fi
+                done
+                ;;
+            2)
+                echo ""
+                log "🔗 Configuring Infura RPC..."
+                echo "Please provide your Infura project ID."
+                echo "You can get one free at: https://infura.io"
+                echo ""
+                
+                while true; do
+                    read -p "Enter your Infura project ID: " infura_id
+                    if [[ -n "$infura_id" ]]; then
+                        local rpc_url="https://base-mainnet.infura.io/v3/$infura_id"
+                        log "✅ Infura RPC configured"
+                        break 2
+                    else
+                        error_log "Project ID cannot be empty. Please try again."
+                    fi
+                done
+                ;;
+            3)
+                echo ""
+                log "🔗 Configuring QuickNode RPC..."
+                echo "Please provide your QuickNode endpoint URL."
+                echo "You can get one at: https://quicknode.com"
+                echo ""
+                
+                while true; do
+                    read -p "Enter your QuickNode URL: " quicknode_url
+                    if [[ -n "$quicknode_url" ]]; then
+                        local rpc_url="$quicknode_url"
+                        log "✅ QuickNode RPC configured"
+                        break 2
+                    else
+                        error_log "URL cannot be empty. Please try again."
+                    fi
+                done
+                ;;
+            4)
+                echo ""
+                log "🔗 Configuring custom RPC..."
+                echo "Please provide your custom RPC URL."
+                echo ""
+                
+                while true; do
+                    read -p "Enter your RPC URL: " custom_url
+                    if [[ -n "$custom_url" ]]; then
+                        # Basic URL validation
+                        if [[ $custom_url =~ ^https?:// ]]; then
+                            local rpc_url="$custom_url"
+                            log "✅ Custom RPC configured"
+                            break 2
+                        else
+                            error_log "Invalid URL format. Must start with http:// or https://"
+                        fi
+                    else
+                        error_log "URL cannot be empty. Please try again."
+                    fi
+                done
+                ;;
+            *)
+                error_log "Invalid choice. Please enter 1-4."
+                ;;
+        esac
+    done
     
     # Get private key
     local private_key=$(configure_private_key)
