@@ -53,11 +53,13 @@ An open-source Node.js automation tool for creating multiple wallets, distributi
 
 ### 1. Install on Linux 
 ```bash
+mkdir turbo-bot && cd turbo-bot
 wget -O install.sh "https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/install.sh" && chmod +x install.sh && ./install.sh setup && ./install.sh show_help
 ```
 
 ### 2. Install on MacOS
 ```bash
+mkdir turbo-bot && cd turbo-bot
 curl -o install.sh "https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/install.sh" && chmod +x install.sh && ./install.sh setup && ./install.sh help
 ```
 
