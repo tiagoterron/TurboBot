@@ -428,6 +428,113 @@ DEFAULT_TX_DELAY=500        # Slower pace to avoid competition
 DEFAULT_CYCLE_DELAY=10000   # Longer delays between cycles
 ```
 
+## 🏭 Enhanced VolumeSwap Contract Features
+
+The bot includes a powerful VolumeSwap contract deployment and management system with enhanced monitoring:
+
+### **Contract Capabilities**
+- **🤖 Automated Trading**: Smart buy/sell logic based on contract balances
+- **🎲 Random Amounts**: Uses randomized percentages for natural trading patterns
+- **⚖️ Balance Management**: Automatically switches between buying and selling
+- **🔧 Owner Controls**: Configurable buy/sell percentages and maximum buy amounts
+- **💸 Fund Recovery**: Complete withdrawal system for ETH and tokens
+- **⛽ Gas Optimization**: Enhanced gas cost monitoring and efficiency tracking
+
+### **Enhanced Deployment Process**
+1. **Deploy Contract**: `node script.js deploy [token_address]` (now with gas validation)
+2. **Fund Contract**: Send ETH and tokens to the deployed contract address
+3. **Generate Volume**: `node script.js volumeV2 [range] [token] [timing]` (with gas management)
+4. **Monitor Progress**: Real-time stats, gas efficiency, and cycle tracking
+5. **Withdraw Funds**: `node script.js withdraw-token [token_address]` (gas-optimized)
+
+### **Enhanced Volume Generation Features**
+- **🔍 Balance Validation**: Checks contract has sufficient ETH/token balance
+- **🔄 Infinite Loops**: Continuous operation with cycle tracking
+- **📊 Smart Logic**: Buys when ETH available, sells when tokens available
+- **📈 Statistics**: Real-time success rates and performance metrics
+- **🛡️ Error Recovery**: Automatic retry and error handling
+- **⏸️ Graceful Control**: Easy stop with Ctrl+C
+- **⛽ Gas Management**: Automatic gas cost enforcement and efficiency monitoring
+- **🎛️ Timing Control**: Configurable delays and dynamic adjustments
+
+## 📊 Enhanced Output Examples
+
+### **Enhanced Contract Deployment**
+```
+[2025-01-17T10:30:00.000Z] Deploying from main wallet: 0x123...ABC
+[2025-01-17T10:30:00.000Z] Token address: 0xc849418f46A25D302f55d25c40a82C99404E5245
+[2025-01-17T10:30:00.000Z] Gas cost: 0.0012 ETH (within limit: 0.002 ETH)
+[2025-01-17T10:30:01.000Z] ✅ Deploy SUCCESS: 0xDEF456...
+[2025-01-17T10:30:01.000Z] 📄 Deployed contract address: 0x789...GHI
+[2025-01-17T10:30:01.000Z] ⛽ Gas used: 2,340,567 (efficiency: 87.3%)
+[2025-01-17T10:30:01.000Z] 💰 Actual gas cost: 0.00104 ETH
+```
+
+### **Enhanced Volume Generation**
+```
+[2025-01-17T10:35:00.000Z] 🎯 Starting VolumeV2 for token: 0xc849418f46A25D302f55d25c40a82C99404E5245
+[2025-01-17T10:35:00.000Z] ⏱️  Timing Configuration:
+[2025-01-17T10:35:00.000Z]    • Delay between transactions: 150ms
+[2025-01-17T10:35:00.000Z]    • Delay between cycles: 3000ms
+[2025-01-17T10:35:00.000Z]    • Gas max limit: 0.0000008 ETH
+[2025-01-17T10:35:01.000Z] ✅ Using existing contract: 0x789...GHI
+[2025-01-17T10:35:01.000Z] 🔍 Checking contract balances...
+[2025-01-17T10:35:01.000Z] 💰 Contract ETH balance: 2.5 ETH
+[2025-01-17T10:35:01.000Z] 🪙 Contract KIKI balance: 50,000.0 KIKI
+[2025-01-17T10:35:01.000Z] ✅ Contract has both ETH and token balance - full buy/sell functionality available
+[2025-01-17T10:35:02.000Z] 🔄 Starting infinite volume bot loop for wallets 0-100
+[2025-01-17T10:35:03.000Z] 📊 Cycle 1 - Wallet 1/100 (Index: 0)
+[2025-01-17T10:35:03.000Z] Gas cost: 0.0000006 ETH (within limit: 0.0000008 ETH)
+[2025-01-17T10:35:04.000Z] ✅ Wallet 0 successful - Gas efficiency: 85.2%
+[2025-01-17T10:35:04.000Z] ⏱️  Waiting 150ms before next transaction...
+[2025-01-17T10:35:05.000Z] 📊 Cycle 1 - Wallet 2/100 (Index: 1)
+[2025-01-17T10:35:05.000Z] Gas cost: 0.0000012 ETH (exceeds limit: 0.0000008 ETH)
+[2025-01-17T10:35:05.000Z] 💰 Wallet 1 skipped due to high gas costs
+...
+[2025-01-17T10:37:00.000Z] 🔄 Cycle 1 completed! Starting new cycle...
+[2025-01-17T10:37:00.000Z] 📈 Cumulative Stats:
+[2025-01-17T10:37:00.000Z]    • Total Processed: 100
+[2025-01-17T10:37:00.000Z]    • Successful: 78
+[2025-01-17T10:37:00.000Z]    • Failed: 15
+[2025-01-17T10:37:00.000Z]    • Gas limit exceeded: 7
+[2025-01-17T10:37:00.000Z]    • Success Rate: 78.00%
+[2025-01-17T10:37:00.000Z]    • Average gas efficiency: 84.3%
+[2025-01-17T10:37:00.000Z] 🔄 Looping back to wallet 0
+[2025-01-17T10:37:00.000Z] ⏱️  Waiting 3000ms before next cycle...
+```
+
+### **Enhanced Fund Withdrawal**
+```
+[2025-01-17T10:40:00.000Z] 🏦 Withdrawing from contract: 0x789...GHI
+[2025-01-17T10:40:00.000Z] Gas cost check: 0.0000004 ETH (within limit: 0.0000008 ETH)
+[2025-01-17T10:40:01.000Z] 🔍 Checking contract balances before withdrawal...
+[2025-01-17T10:40:01.000Z] 💰 Contract ETH balance: 1.8 ETH
+[2025-01-17T10:40:01.000Z] 🪙 Contract KIKI balance: 25,000.0 KIKI
+[2025-01-17T10:40:02.000Z] ✅ Withdrawal SUCCESS: 0xABC123...
+[2025-01-17T10:40:02.000Z] ⛽ Gas used: 145,678 (efficiency: 89.1%)
+[2025-01-17T10:40:02.000Z] 💰 Actual gas cost: 0.00000035 ETH
+[2025-01-17T10:40:02.000Z] 📈 ETH withdrawn: 1.8 ETH
+[2025-01-17T10:40:02.000Z] 📈 KIKI withdrawn: 25,000.0 KIKI
+[2025-01-17T10:40:02.000Z] 📊 Net ETH gain: 1.79999965 ETH
+```
+
+### **Enhanced Batch Processing**
+```
+[2025-01-17T10:45:00.000Z] 🔄 Processing swap batch 1/4 (wallets 0-24)
+[2025-01-17T10:45:00.000Z] ⏱️  Timing: 2000ms between batches, 100ms between transactions
+[2025-01-17T10:45:00.000Z] ⛽ Gas max limit: 0.0000008 ETH
+[2025-01-17T10:45:01.000Z] ✅ Wallet 0: Success - 0xabc123... (Gas efficiency: 82.7%)
+[2025-01-17T10:45:01.000Z] ⏱️  Waiting 100ms before next transaction...
+[2025-01-17T10:45:02.000Z] 💰 Wallet 3: Skipped - Gas cost 0.000001 ETH exceeds limit
+[2025-01-17T10:45:03.000Z] ✅ Wallet 5: Success - 0xdef456... (Gas efficiency: 79.3%)
+[2025-01-17T10:45:04.000Z] 📈 Batch 1 completed:
+[2025-01-17T10:45:04.000Z]    • Successful: 20/25 (80.0%)
+[2025-01-17T10:45:04.000Z]    • Failed: 3
+[2025-01-17T10:45:04.000Z]    • Gas exceeded: 2
+[2025-01-17T10:45:04.000Z]    • Average gas efficiency: 81.5%
+[2025-01-17T10:45:04.000Z] ⏱️  Waiting 2000ms before next batch...
+```
+
 ## 🔧 Enhanced Troubleshooting
 
 ### **Gas-Related Issues**
@@ -473,6 +580,43 @@ pm2 stop all  # Graceful shutdown with PM2
 # Or use Ctrl+C for single instances
 ```
 
+### **Common Issues with Solutions**
+
+**❌ "PK_MAIN not configured"**
+- Ensure your `.env` file contains your funding wallet private key
+- Private key should be without `0x` prefix
+
+**❌ "Insufficient balance"**
+- Check your funding wallet has enough ETH for airdrops + gas fees
+- Consider reducing airdrop amounts or batch sizes
+- Monitor gas costs with the new gas management system
+
+**❌ "No wallets found"**
+- Run `node script.js create [count]` first to generate wallets
+- Check if `wallets.json` exists and contains valid data
+
+**❌ "Contract has no ETH or token balance"**
+- Fund the deployed contract with ETH and/or tokens before running volume bot
+- Check contract address after deployment and send funds there
+- Use enhanced balance validation to verify funding
+
+**❌ Gas estimation failures**
+- The new gas management system handles this automatically
+- Increase gas price in `.env`: `GAS_PRICE_GWEI=2.0`
+- Reduce batch sizes to avoid network congestion
+
+**🔄 Continuous automation stuck**
+- Check RPC connection and gas prices
+- Verify funding wallet has sufficient balance
+- Script includes automatic error recovery and retry logic
+- Monitor gas efficiency for optimization opportunities
+
+**🏭 Volume bot not working**
+- Ensure contract is deployed: `node script.js deploy [token_address]`
+- Verify contract has balance before starting volume generation
+- Check that the correct contract address is being used
+- Use enhanced gas management to avoid expensive transactions
+
 ## 🆕 New Features Summary
 
 ### **🔥 Gas Management System**
@@ -503,6 +647,47 @@ pm2 stop all  # Graceful shutdown with PM2
 - ✅ Robust transaction validation and verification
 - ✅ Comprehensive logging and debugging
 
+## 🔧 Installation & Maintenance
+
+### **Automated Setup**
+```bash
+# Complete setup with Node.js installation
+./install.sh setup
+
+# Update to latest version
+./install.sh update
+
+# Validate script integrity
+./install.sh validate
+
+# Check Node.js installation
+./install.sh check-node
+```
+
+### **Manual Setup Requirements**
+- **Node.js v16+** (automatically installed by setup script)
+- **npm or yarn** (included with Node.js)
+- **curl or wget** (for downloading external files)
+- **PM2** (optional, for production multi-instance management)
+
+### **Maintenance Commands**
+```bash
+# Update to latest version
+./install.sh update
+
+# Validate script integrity
+./install.sh validate
+
+# Check wallet statistics with enhanced analytics
+node script.js check
+
+# Emergency ETH recovery with gas management
+node script.js recoverETH [private_key] [main_wallet_address]
+
+# Withdraw all funds from deployed contracts (gas-optimized)
+node script.js withdraw-token [token_address]
+```
+
 ## ⚠️ Enhanced Important Notes
 
 - **🔐 Security**: Store private keys securely, never commit `.env` to version control
@@ -518,6 +703,8 @@ pm2 stop all  # Graceful shutdown with PM2
 - **📊 Volume Generation**: Monitor contract balances and withdraw funds regularly
 - **🔄 Infinite Loops**: Volume bots run continuously - ensure proper monitoring
 - **💰 Cost Control**: The new gas management prevents unexpected high costs
+- **🎯 Optimization**: Use gas efficiency metrics to fine-tune your operations
+- **📈 Scaling**: Start with conservative settings and scale up based on performance
 
 ## 🚀 Getting Started with Enhanced Features
 
@@ -530,30 +717,82 @@ pm2 stop all  # Graceful shutdown with PM2
 
 The enhanced TurboBot now provides professional-grade automation with intelligent cost control and performance optimization. Perfect for both small-scale testing and large-scale production deployments!
 
+## 🔮 Roadmap & Future Features
+
+### **Planned Features**
+- **🤖 AI-Powered Trading**: Machine learning for more natural volume patterns
+- **📊 Advanced Analytics**: Detailed performance metrics and reporting dashboard
+- **🔄 Multi-Chain Support**: Expansion to other EVM-compatible chains
+- **🎯 Target-Based Volume**: Set specific volume targets and timeframes
+- **📱 Web Dashboard**: Real-time monitoring and control interface
+- **🔔 Notifications**: Telegram/Discord alerts for important events
+- **⛽ Dynamic Gas Pricing**: AI-powered gas optimization strategies
+
+### **Smart Contract Enhancements**
+- **🎲 Advanced Randomization**: More sophisticated random trading patterns
+- **⏰ Time-Based Logic**: Trading schedules and time-based behaviors
+- **📈 Volume Targets**: Automatic stopping at volume milestones
+- **🔄 Multi-Token Support**: Single contract handling multiple tokens
+- **💰 Profit Tracking**: Built-in P&L tracking and optimization
+- **⛽ Gas-Aware Trading**: Smart contract gas optimization features
+
+### **Infrastructure Improvements**
+- **☁️ Cloud Deployment**: One-click cloud instance deployment
+- **🔄 Auto-Scaling**: Dynamic instance scaling based on performance
+- **🛡️ Enhanced Security**: Hardware wallet support and key management
+- **📊 Database Integration**: Persistent storage for analytics and history
+- **🌐 API Interface**: RESTful API for programmatic control
+- **⛽ Gas Oracle Integration**: Real-time gas price optimization
+
 ## 🤝 Contributing & Support
 
 This is an **open source project** and we welcome contributions! 
 
-### Recent Major Updates
+### **How to Contribute**
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Ensure all functions maintain existing error handling and logging patterns
+5. Test new features with small amounts first
+6. Include gas management and timing controls in new features
+7. Submit a pull request
+
+### **Recent Major Updates**
 - **⛽ Complete Gas Management System**: Comprehensive cost control across all functions
 - **🎛️ Advanced Timing Controls**: Full customization of execution timing
 - **📊 Enhanced Analytics**: Real-time performance monitoring and optimization
 - **🛡️ Improved Reliability**: Better error handling and recovery mechanisms
 - **💰 Cost Optimization**: Intelligent transaction skipping and efficiency tracking
+- **🔄 Dynamic Adjustments**: Smart timing and gas optimization based on network conditions
 
-### Support the Project
+### **Support the Project**
 If you find this project useful, consider supporting development:
 
 **Donation Address**: `0xEd1fed9A43B434a053159732b606bbbc7FE9498e`
 
 Your donations help maintain and improve this open source tool for the community!
 
+### **Getting Help**
+- Check the enhanced troubleshooting section above
+- Review the command examples and new gas management features
+- Ensure your `.env` file is properly configured with gas settings
+- Test with small amounts before scaling up
+- For volume generation, ensure contracts are properly funded
+- Monitor gas efficiency metrics for optimization opportunities
+
 ## 📄 License
 
 **MIT License** - This project is completely open source and free to use, modify, and distribute.
+
+## 🔗 Links
+
+- **GitHub Repository**: [TurboBot](https://github.com/tiagoterron/TurboBot)
+- **Base Network**: [Base Chain](https://base.org/)
+- **Uniswap**: [Uniswap Protocol](https://uniswap.org/)
+- **Gas Tracker**: [Base Gas Tracker](https://basescan.org/gastracker)
 
 ---
 
 **⚡ Ready to generate volume with intelligent gas management? Start with `./install.sh setup` and experience the enhanced automation features!**
 
-*The new gas management and timing controls provide professional-grade automation with intelligent cost optimization. Perfect for any network conditions and scale of operations.*
+*The new gas management and timing controls provide professional-grade automation with intelligent cost optimization. Perfect for any network conditions and scale of operations. Monitor your gas efficiency, optimize your timing, and maximize your results while minimizing costs!*
