@@ -712,12 +712,16 @@ create_env_template() {
                         
                         # Show wallet address
                         local wallet_address=$(get_wallet_address "$private_key")
-                        if [[ -n "$wallet_address" && "$wallet_address" != "Unable to derive address" ]]; then
+                        if [[ -n "$wallet_address" && "$wallet_address" != "Unable to derive address" && "$wallet_address" != "DERIVE_LATER" ]]; then
                             echo ""
                             echo -e "${GREEN}📍 Wallet Address (for funding):${NC}"
                             echo -e "${BLUE}$wallet_address${NC}"
                             echo ""
                             echo -e "${YELLOW}💰 Important: Send ETH to this address for gas fees!${NC}"
+                            echo ""
+                        else
+                            echo ""
+                            echo -e "${YELLOW}📍 Wallet address will be shown after setup completion${NC}"
                             echo ""
                         fi
                         
@@ -741,9 +745,12 @@ create_env_template() {
                     
                     # Show wallet address
                     local wallet_address=$(get_wallet_address "$generated_key")
-                    if [[ -n "$wallet_address" && "$wallet_address" != "Unable to derive address" ]]; then
+                    if [[ -n "$wallet_address" && "$wallet_address" != "Unable to derive address" && "$wallet_address" != "DERIVE_LATER" ]]; then
                         echo -e "${GREEN}📍 Wallet Address (for funding):${NC}"
                         echo -e "${BLUE}$wallet_address${NC}"
+                        echo ""
+                    else
+                        echo -e "${YELLOW}📍 Wallet address will be shown after setup completion${NC}"
                         echo ""
                     fi
                     
@@ -837,9 +844,15 @@ EOF
     echo "- File permissions: Set to 600 (owner read/write only) ✅"
     
     # Show wallet address in summary
-    local wallet_address=$(get_wallet_address "$private_key")
+    local wallet_address=$(derive_address_after_setup "$private_key")
     if [[ -n "$wallet_address" && "$wallet_address" != "Unable to derive address" ]]; then
         echo "- Funding Wallet Address: $wallet_address ✅"
+        echo ""
+        echo -e "${BLUE}💰 FUNDING INSTRUCTIONS:${NC}"
+        echo -e "${YELLOW}Send ETH to: $wallet_address${NC}"
+        echo "This wallet will be used to fund all created wallets for gas fees."
+    else
+        echo "- Wallet Address: Will be derived when running wallet operations ⏳"
     fi
     
     if [[ $wallet_count -gt 0 ]]; then
@@ -1046,6 +1059,22 @@ case ${1:-help} in
         create_env_template
         install_dependencies
         validate_scripts
+        
+        # Show final wallet address after dependencies are installed
+        if [[ -f "$ENV_FILE" ]]; then
+            local final_private_key=$(grep "PK_MAIN=" "$ENV_FILE" | cut -d'=' -f2)
+            if [[ -n "$final_private_key" ]]; then
+                local final_address=$(derive_address_after_setup "$final_private_key")
+                if [[ -n "$final_address" && "$final_address" != "Unable to derive address" ]]; then
+                    echo ""
+                    echo -e "${GREEN}🎯 FINAL SETUP SUMMARY${NC}"
+                    echo -e "${BLUE}Funding Wallet Address: $final_address${NC}"
+                    echo -e "${YELLOW}👆 Send ETH to this address for gas fees!${NC}"
+                    echo ""
+                fi
+            fi
+        fi
+        
         log "✅ Setup completed!"
         log "🚀 You can now use: node script.js [command] [args]"
         ;;
