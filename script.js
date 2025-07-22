@@ -1,4 +1,4 @@
-//V 1.0.6
+//V 1.0.7
 const { ethers, utils } = require('ethers');
 const fs = require('fs');
 const path = require('path');
