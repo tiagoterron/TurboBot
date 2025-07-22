@@ -5183,12 +5183,12 @@ async function main() {
                 break;
                 
             case 'create-and-swapv3':
-                tokenAddress = args[0] || random(defaultTokens["V3"]);
+                tokens = args[0] ? args[0].split(',') : random(defaultTokens["V3"]);
                 cycleDelay = parseInt(args[1]) || 3000;
                 fundingAmount = args[2] || "0.000005";
                 
                 try {
-                    await createWalletAndMultiv3(tokenAddress, cycleDelay, fundingAmount);
+                    await createWalletAndMultiSmallV3(tokens, cycleDelay, fundingAmount);
                 } catch (err) {
                     console.log(err)
                 }
