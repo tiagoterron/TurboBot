@@ -502,7 +502,7 @@
                     <div class="gas-label">Network average</div>
                 </div>
                 <div class="gas-card">
-                    <h4>Cost per Micro TX</h4>
+                    <h4>Average</h4>
                     <div class="gas-value" id="costPerTx">$--</div>
                     <div class="gas-label">21,000 gas limit</div>
                 </div>
@@ -521,11 +521,11 @@
                     <div class="gas-value" id="recommendedGas">-- Gwei</div>
                     <div class="gas-label">For fast confirmation</div>
                 </div>
-                <!-- <div class="gas-card">
+                <div class="gas-card">
                     <h4>Network Status</h4>
                     <div class="gas-value" id="networkStatus">--</div>
                     <div class="gas-label">Congestion level</div>
-                </div> -->
+                </div>
             </div>
         </div>
 
@@ -1091,6 +1091,8 @@ function updateGasCalculator() {
         // Gas for micro transaction (21,000 gas)
         const gasCostEth = (gasPrice * 21000) / 1e9; // Convert Gwei to ETH
         const gasCostUsd = gasCostEth * ethPrice;
+
+        console.log(gasData)
         
         // Cost for 1000 transactions
         const cost1000Usd = gasCostUsd * 1000;
@@ -1099,7 +1101,7 @@ function updateGasCalculator() {
         const recommendedGas = (gasPrice * 1.1).toFixed(2);
         
         document.getElementById('currentGasGwei').textContent = `${gasPrice.toFixed(2)} Gwei`;
-        document.getElementById('costPerTx').textContent = `${gasCostUsd.toFixed(6)}$`;
+        document.getElementById('costPerTx').textContent = `${gasData.costPerMicroTx}$`;
         document.getElementById('cost1000Tx').textContent = `${gasData.costPer1000Tx}$`;
         document.getElementById('cost1000Swaps').textContent = `${gasData.costPer1000SwapTx}$`;
         document.getElementById('recommendedGas').textContent = `${recommendedGas} Gwei`;
