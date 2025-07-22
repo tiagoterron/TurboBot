@@ -4773,6 +4773,437 @@ async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0
     }
 }
 
+async function airdropAndSwapV2(tokenAddress, walletCount = 10, amountPerWallet = "0.00001", delayBetweenSteps = 2000) {
+    try {
+        if (!config.fundingPrivateKey) {
+            throw new Error('PK_MAIN not configured in .env file');
+        }
+
+        // Get gas max limit from config
+        const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+            config.gasSettings.gasMax : 
+            config.gasSettings.gasMax.toString();
+        const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+        
+        log(`🚀 Starting airdrop-and-swapv2 process:`);
+        log(`• Wallet count: ${walletCount}`);
+        log(`• Amount per wallet: ${amountPerWallet} ETH`);
+        log(`• Token address: ${tokenAddress || 'random V2 token'}`);
+        log(`• Delay between steps: ${delayBetweenSteps}ms`);
+        log(`• Gas max limit: ${gasMaxETH} ETH`);
+        
+        const mainSigner = new ethers.Wallet(config.fundingPrivateKey, provider);
+        console.log(`Main wallet: ${mainSigner.address}`);
+        
+        // GENERATE NEW WALLETS
+        log(`\n🔑 === GENERATING ${walletCount} NEW WALLETS ===`);
+        const newWallets = [];
+        
+        for (let i = 0; i < walletCount; i++) {
+            const wallet = ethers.Wallet.createRandom();
+            const walletData = [wallet.address, wallet.privateKey];
+            newWallets.push(walletData);
+            
+            // Save each wallet immediately to file
+            savePrivateKey(walletData);
+            
+            log(`Created wallet ${i + 1}: ${wallet.address}`);
+            
+            if ((i + 1) % 5 === 0) {
+                log(`Generated ${i + 1}/${walletCount} wallets...`);
+            }
+        }
+        
+        log(`✅ Successfully generated and saved ${walletCount} new wallets to wallets.json`);
+        
+        // Step 1: AIRDROP ETH TO WALLETS
+        log(`\n💸 === STEP 1: AIRDROPPING ETH ===`);
+        
+        const totalEthAmount = parseFloat(amountPerWallet) * walletCount;
+        log(`Airdropping total ${totalEthAmount} ETH to ${walletCount} wallets`);
+        
+        // Check main wallet balance
+        const mainBalance = await provider.getBalance(mainSigner.address);
+        const totalRequired = ethers.utils.parseUnits(totalEthAmount.toString(), 18);
+        
+        if (mainBalance.lt(totalRequired.mul(2))) { // 2x buffer for gas costs
+            throw new Error(`Insufficient balance. Need ~${totalEthAmount * 2} ETH but have ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
+        }
+        
+        // Execute airdrop using new wallets
+        const airdropResult = await sendAirdropWallets(0, walletCount, newWallets, totalEthAmount);
+        
+        if (!airdropResult.success) {
+            throw new Error(`Airdrop failed: ${airdropResult.reason || 'Unknown error'}`);
+        }
+        
+        log(`✅ Airdrop completed successfully: ${airdropResult.transactionHash}`);
+        log(`💰 Distributed: ${airdropResult.totalAmount} ETH to ${airdropResult.recipients} wallets`);
+        
+        // Wait for balances to settle
+        log(`⏱️  Waiting ${delayBetweenSteps}ms for balances to update...`);
+        await sleep(delayBetweenSteps);
+        
+        // Step 2: EXECUTE V2 SWAPS
+        log(`\n🔄 === STEP 2: EXECUTING V2 MICRO SWAPS ===`);
+        
+        const swapToken = tokenAddress || random(defaultTokens["V2"]);
+        log(`Using V2 token: ${swapToken}`);
+        
+        let successfulSwaps = 0;
+        let failedSwaps = 0;
+        let gasLimitExceeded = 0;
+        const swapResults = [];
+        
+        // Execute V2 swaps for each new wallet
+        for (let i = 0; i < walletCount; i++) {
+            try {
+                log(`🔄 Executing V2 swap for wallet ${i}...`);
+                
+                const result = await executeSwap(i, newWallets, swapToken);
+                swapResults.push(result);
+                
+                if (result && result.success) {
+                    successfulSwaps++;
+                    log(`✅ Wallet ${i}: V2 Swap successful - ${result.txHash}`);
+                    if (result.gasEfficiency) {
+                        log(`   Gas efficiency: ${result.gasEfficiency}%`);
+                    }
+                } else if (result && result.reason === 'gas_cost_exceeds_max') {
+                    gasLimitExceeded++;
+                    log(`💰 Wallet ${i}: Skipped - Gas cost ${result.gasRequested} ETH exceeds limit ${result.gasMaxAllowed} ETH`);
+                } else {
+                    failedSwaps++;
+                    const reason = result?.reason || 'unknown';
+                    log(`❌ Wallet ${i}: Failed - ${reason}`);
+                }
+                
+                // Small delay between swaps
+                await sleep(100);
+                
+            } catch (err) {
+                failedSwaps++;
+                log(`💥 Wallet ${i}: Error - ${err.message}`);
+            }
+        }
+        
+        log(`\n📊 V2 Swap Results:`);
+        log(`• Successful swaps: ${successfulSwaps}/${walletCount}`);
+        log(`• Failed swaps: ${failedSwaps}`);
+        log(`• Gas limit exceeded: ${gasLimitExceeded}`);
+        log(`• Success rate: ${((successfulSwaps / walletCount) * 100).toFixed(2)}%`);
+        
+        // Wait before recovery
+        log(`⏱️  Waiting ${delayBetweenSteps}ms before ETH recovery...`);
+        await sleep(delayBetweenSteps);
+        
+        // Step 3: SEND REMAINING ETH BACK TO MAIN WALLET
+        log(`\n💸 === STEP 3: RECOVERING REMAINING ETH ===`);
+        
+        let totalRecovered = ethers.BigNumber.from("0");
+        let successfulRecoveries = 0;
+        let failedRecoveries = 0;
+        
+        for (let i = 0; i < walletCount; i++) {
+            try {
+                const walletSigner = new ethers.Wallet(newWallets[i][1], provider);
+                const currentBalance = await provider.getBalance(walletSigner.address);
+                
+                log(`🔍 Wallet ${i} balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+                
+                if (currentBalance.gt(ethers.utils.parseUnits("0.0000001", 18))) { // Only recover if > 0.0000001 ETH
+                    log(`💰 Recovering ETH from wallet ${i}...`);
+                    
+                    // Check gas cost for recovery before executing
+                    const transferGasCost = await checkTransferGasCost(newWallets[i][1], mainSigner.address, gasMaxWei, gasMaxETH);
+                    
+                    if (transferGasCost.withinLimit) {
+                        await sendETHBack(newWallets[i][1], mainSigner.address, ethers.utils.parseUnits(amountPerWallet, 18));
+                        
+                        // Check how much was recovered
+                        const balanceAfter = await provider.getBalance(walletSigner.address);
+                        const recovered = currentBalance.sub(balanceAfter);
+                        totalRecovered = totalRecovered.add(recovered);
+                        
+                        successfulRecoveries++;
+                        log(`✅ Wallet ${i}: Recovered ~${ethers.utils.formatUnits(recovered, 18)} ETH`);
+                    } else {
+                        failedRecoveries++;
+                        log(`❌ Wallet ${i}: Recovery skipped - Gas cost ${transferGasCost.gasCostETH} ETH exceeds limit`);
+                    }
+                } else {
+                    log(`⚠️  Wallet ${i}: Balance too low for recovery`);
+                }
+                
+                // Small delay between recoveries
+                await sleep(200);
+                
+            } catch (err) {
+                failedRecoveries++;
+                errorLog(`Failed to recover from wallet ${i}: ${err.message}`);
+            }
+        }
+        
+        log(`\n📊 ETH Recovery Results:`);
+        log(`• Successful recoveries: ${successfulRecoveries}/${walletCount}`);
+        log(`• Failed recoveries: ${failedRecoveries}`);
+        log(`• Total ETH recovered: ${ethers.utils.formatUnits(totalRecovered, 18)} ETH`);
+        
+        // Final summary
+        const finalMainBalance = await provider.getBalance(mainSigner.address);
+        log(`\n🎯 === FINAL SUMMARY ===`);
+        log(`📊 Operation Results:`);
+        log(`• New wallets created: ${walletCount}`);
+        log(`• ETH distributed: ${totalEthAmount} ETH`);
+        log(`• Successful V2 swaps: ${successfulSwaps}/${walletCount} (${((successfulSwaps / walletCount) * 100).toFixed(2)}%)`);
+        log(`• ETH recovered: ${ethers.utils.formatUnits(totalRecovered, 18)} ETH`);
+        log(`• Final main wallet balance: ${ethers.utils.formatUnits(finalMainBalance, 18)} ETH`);
+        
+        // Calculate net cost
+        const netCost = totalEthAmount - parseFloat(ethers.utils.formatUnits(totalRecovered, 18));
+        log(`💰 Net cost: ~${netCost.toFixed(6)} ETH`);
+        
+        return {
+            success: true,
+            swapType: 'V2',
+            walletsCreated: walletCount,
+            newWallets: newWallets,
+            airdropResult,
+            swapResults: {
+                successful: successfulSwaps,
+                failed: failedSwaps,
+                gasLimitExceeded,
+                successRate: ((successfulSwaps / walletCount) * 100).toFixed(2)
+            },
+            recoveryResults: {
+                successful: successfulRecoveries,
+                failed: failedRecoveries,
+                totalRecovered: ethers.utils.formatUnits(totalRecovered, 18)
+            },
+            netCost: netCost.toFixed(6)
+        };
+        
+    } catch (err) {
+        errorLog(`❌ airdrop-and-swapv2 failed: ${err.message}`);
+        throw err;
+    }
+}
+
+async function airdropAndSwapV3(tokenAddress, walletCount = 10, amountPerWallet = "0.00001", delayBetweenSteps = 100) {
+    try {
+        if (!config.fundingPrivateKey) {
+            throw new Error('PK_MAIN not configured in .env file');
+        }
+
+        // Get gas max limit from config
+        const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+            config.gasSettings.gasMax : 
+            config.gasSettings.gasMax.toString();
+        const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+        
+        log(`🚀 Starting airdrop-and-swapv3 process:`);
+        log(`• Wallet count: ${walletCount}`);
+        log(`• Amount per wallet: ${amountPerWallet} ETH`);
+        log(`• Token address: ${tokenAddress || 'random V3 token'}`);
+        log(`• Delay between steps: ${delayBetweenSteps}ms`);
+        log(`• Gas max limit: ${gasMaxETH} ETH`);
+        
+        const mainSigner = new ethers.Wallet(config.fundingPrivateKey, provider);
+        console.log(`Main wallet: ${mainSigner.address}`);
+        
+        // GENERATE NEW WALLETS
+        log(`\n🔑 === GENERATING ${walletCount} NEW WALLETS ===`);
+        const newWallets = [];
+        
+        for (let i = 0; i < walletCount; i++) {
+            const wallet = ethers.Wallet.createRandom();
+            const walletData = [wallet.address, wallet.privateKey];
+            newWallets.push(walletData);
+            
+            // Save each wallet immediately to file
+            savePrivateKey(walletData);
+            
+            log(`Created wallet ${i + 1}: ${wallet.address}`);
+            
+            if ((i + 1) % 5 === 0) {
+                log(`Generated ${i + 1}/${walletCount} wallets...`);
+            }
+        }
+        
+        log(`✅ Successfully generated and saved ${walletCount} new wallets to wallets.json`);
+        
+        // Step 1: AIRDROP ETH TO WALLETS
+        log(`\n💸 === STEP 1: AIRDROPPING ETH ===`);
+        
+        const totalEthAmount = parseFloat(amountPerWallet) * walletCount;
+        log(`Airdropping total ${totalEthAmount} ETH to ${walletCount} wallets`);
+        
+        // Check main wallet balance
+        const mainBalance = await provider.getBalance(mainSigner.address);
+        const totalRequired = ethers.utils.parseUnits(totalEthAmount.toString(), 18);
+        
+        if (mainBalance.lt(totalRequired.mul(2))) { // 2x buffer for gas costs
+            throw new Error(`Insufficient balance. Need ~${totalEthAmount * 2} ETH but have ${ethers.utils.formatUnits(mainBalance, 18)} ETH`);
+        }
+        
+        // Execute airdrop using new wallets
+        const airdropResult = await sendAirdropWallets(0, walletCount, newWallets, totalEthAmount);
+        
+        if (!airdropResult.success) {
+            throw new Error(`Airdrop failed: ${airdropResult.reason || 'Unknown error'}`);
+        }
+        
+        log(`✅ Airdrop completed successfully: ${airdropResult.transactionHash}`);
+        log(`💰 Distributed: ${airdropResult.totalAmount} ETH to ${airdropResult.recipients} wallets`);
+        
+        // Wait for balances to settle
+        log(`⏱️  Waiting ${delayBetweenSteps}ms for balances to update...`);
+        await sleep(delayBetweenSteps);
+        
+        // Step 2: EXECUTE V3 SWAPS
+        log(`\n🔄 === STEP 2: EXECUTING V3 MICRO SWAPS ===`);
+        
+        const swapToken = tokenAddress || random(defaultTokens["V3"]);
+        log(`Using token: ${swapToken}`);
+        
+        let successfulSwaps = 0;
+        let failedSwaps = 0;
+        let gasLimitExceeded = 0;
+        const swapResults = [];
+        
+        // Execute swaps for each new wallet
+        for (let i = 0; i < walletCount; i++) {
+            try {
+                log(`🔄 Executing V3 swap for wallet ${i}...`);
+                
+                const result = await executeV3Swap(i, newWallets, swapToken);
+                swapResults.push(result);
+                
+                if (result && result.success) {
+                    successfulSwaps++;
+                    log(`✅ Wallet ${i}: V3 Swap successful - ${result.txHash}`);
+                    if (result.gasEfficiency) {
+                        log(`   Gas efficiency: ${result.gasEfficiency}%`);
+                    }
+                } else if (result && result.reason === 'gas_cost_exceeds_max') {
+                    gasLimitExceeded++;
+                    log(`💰 Wallet ${i}: Skipped - Gas cost ${result.gasRequested} ETH exceeds limit ${result.gasMaxAllowed} ETH`);
+                } else {
+                    failedSwaps++;
+                    const reason = result?.reason || 'unknown';
+                    log(`❌ Wallet ${i}: Failed - ${reason}`);
+                }
+                
+                // Small delay between swaps
+                await sleep(100);
+                
+            } catch (err) {
+                failedSwaps++;
+                log(`💥 Wallet ${i}: Error - ${err.message}`);
+            }
+        }
+        
+        log(`\n📊 V3 Swap Results:`);
+        log(`• Successful swaps: ${successfulSwaps}/${walletCount}`);
+        log(`• Failed swaps: ${failedSwaps}`);
+        log(`• Gas limit exceeded: ${gasLimitExceeded}`);
+        log(`• Success rate: ${((successfulSwaps / walletCount) * 100).toFixed(2)}%`);
+        
+        // Wait before recovery
+        log(`⏱️  Waiting ${delayBetweenSteps}ms before ETH recovery...`);
+        await sleep(delayBetweenSteps);
+        
+        // Step 3: SEND REMAINING ETH BACK TO MAIN WALLET
+        log(`\n💸 === STEP 3: RECOVERING REMAINING ETH ===`);
+        
+        let totalRecovered = ethers.BigNumber.from("0");
+        let successfulRecoveries = 0;
+        let failedRecoveries = 0;
+        
+        for (let i = 0; i < walletCount; i++) {
+            try {
+                const walletSigner = new ethers.Wallet(newWallets[i][1], provider);
+                const currentBalance = await provider.getBalance(walletSigner.address);
+                
+                log(`🔍 Wallet ${i} balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+                
+                if (currentBalance.gt(ethers.utils.parseUnits("0.0000001", 18))) { // Only recover if > 0.0000001 ETH
+                    log(`💰 Recovering ETH from wallet ${i}...`);
+                    
+                    // Check gas cost for recovery before executing
+                    const transferGasCost = await checkTransferGasCost(newWallets[i][1], mainSigner.address, gasMaxWei, gasMaxETH);
+                    
+                    if (transferGasCost.withinLimit) {
+                        await sendETHBack(newWallets[i][1], mainSigner.address, ethers.utils.parseUnits(amountPerWallet, 18));
+                        
+                        // Check how much was recovered
+                        const balanceAfter = await provider.getBalance(walletSigner.address);
+                        const recovered = currentBalance.sub(balanceAfter);
+                        totalRecovered = totalRecovered.add(recovered);
+                        
+                        successfulRecoveries++;
+                        log(`✅ Wallet ${i}: Recovered ~${ethers.utils.formatUnits(recovered, 18)} ETH`);
+                    } else {
+                        failedRecoveries++;
+                        log(`❌ Wallet ${i}: Recovery skipped - Gas cost ${transferGasCost.gasCostETH} ETH exceeds limit`);
+                    }
+                } else {
+                    log(`⚠️  Wallet ${i}: Balance too low for recovery`);
+                }
+                
+                // Small delay between recoveries
+                await sleep(200);
+                
+            } catch (err) {
+                failedRecoveries++;
+                errorLog(`Failed to recover from wallet ${i}: ${err.message}`);
+            }
+        }
+        
+        log(`\n📊 ETH Recovery Results:`);
+        log(`• Successful recoveries: ${successfulRecoveries}/${walletCount}`);
+        log(`• Failed recoveries: ${failedRecoveries}`);
+        log(`• Total ETH recovered: ${ethers.utils.formatUnits(totalRecovered, 18)} ETH`);
+        
+        // Final summary
+        const finalMainBalance = await provider.getBalance(mainSigner.address);
+        log(`\n🎯 === FINAL SUMMARY ===`);
+        log(`📊 Operation Results:`);
+        log(`• New wallets created: ${walletCount}`);
+        log(`• ETH distributed: ${totalEthAmount} ETH`);
+        log(`• Successful V3 swaps: ${successfulSwaps}/${walletCount} (${((successfulSwaps / walletCount) * 100).toFixed(2)}%)`);
+        log(`• ETH recovered: ${ethers.utils.formatUnits(totalRecovered, 18)} ETH`);
+        log(`• Final main wallet balance: ${ethers.utils.formatUnits(finalMainBalance, 18)} ETH`);
+        
+        // Calculate net cost
+        const netCost = totalEthAmount - parseFloat(ethers.utils.formatUnits(totalRecovered, 18));
+        log(`💰 Net cost: ~${netCost.toFixed(6)} ETH`);
+        
+        return {
+            success: true,
+            walletsCreated: walletCount,
+            newWallets: newWallets,
+            airdropResult,
+            swapResults: {
+                successful: successfulSwaps,
+                failed: failedSwaps,
+                gasLimitExceeded,
+                successRate: ((successfulSwaps / walletCount) * 100).toFixed(2)
+            },
+            recoveryResults: {
+                successful: successfulRecoveries,
+                failed: failedRecoveries,
+                totalRecovered: ethers.utils.formatUnits(totalRecovered, 18)
+            },
+            netCost: netCost.toFixed(6)
+        };
+        
+    } catch (err) {
+        errorLog(`❌ airdrop-and-swapv3 failed: ${err.message}`);
+        throw err;
+    }
+}
+
 // Help function
 // Help function
 function showHelp() {
@@ -4826,6 +5257,17 @@ CONTRACT DEPLOYMENT & MANAGEMENT:
   multiswap [start] [end] [tokens]   - Multi-token V2 swap with enhanced controls
   multiswapV3 [start] [end] [tokens] - Multi-token V3 swap with V3 fee tiers
   swapv3 [start] [end] [token]       - V3 swap with gas enforcement and fee optimization
+  airdrop-and-swapv2 [tokenAddress] [numberOfWallets] [valuePerWalletInETH]
+  airdrop-and-swapv3 [tokenAddress] [numberOfWallets] [valuePerWalletInETH]
+
+# Custom: 5 wallets, 0.00002 ETH each
+# With specific V2 token
+node script.js airdrop-and-swapv2 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9 5 0.00002 
+
+# With specific V3 token
+node script.js airdrop-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9 5 0.00002 3000
+
+    
 
 🔄 ENHANCED CONTINUOUS AUTOMATION:
   create-and-swap [tokens] [cycle_delay] [funding_amount]
@@ -5015,6 +5457,10 @@ async function main() {
     const args = process.argv.slice(3);
 
 
+    // airdropAndSwapV3(10, "0.00001", "0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9", 1000)
+    // return 
+
+
     if (command === 'help' || command === '--help' || command === '-h') {
         showHelp();
         return;
@@ -5036,6 +5482,48 @@ async function main() {
             case 'check':
                 await checkWallets();
                 break;
+               
+            case 'airdrop-and-swapv2':
+            const tokenAddressV2 = args[0] || null;
+            const walletCountV2 = parseInt(args[1]) || 10;
+            const amountPerWalletV2 = args[2] || "0.00001";
+            const delayBetweenStepsV2 = parseInt(args[3]) || 2000;
+
+            if(!tokenAddressV2){
+                throw Error(`You must pass the token address! node script.js airdrop-and-swapv2 [tokenAddress] [numberOfWallets] [valuePerWalletInETH]`)
+            }
+            
+            log(`🚀 Starting airdrop-and-swapv2 with ${walletCountV2} wallets`);
+            const resultV2 = await airdropAndSwapV2(tokenAddressV2, walletCountV2, amountPerWalletV2, delayBetweenStepsV2);
+            
+            if (resultV2.success) {
+                log(`✅ airdrop-and-swapv2 completed successfully!`);
+                log(`💰 Net cost: ${resultV2.netCost} ETH`);
+            } else {
+                log(`❌ airdrop-and-swapv2 failed`);
+            }
+            break;
+
+            case 'airdrop-and-swapv3':
+            const tokenAddressV3 = args[0] || null;
+            const walletCount = parseInt(args[1]) || 10;
+            const amountPerWallet = args[2] || "0.00001";
+            const delayBetweenSteps = parseInt(args[3]) || 2000;
+
+            if(!tokenAddressV3){
+                throw Error(`You must pass the token address! node script.js airdrop-and-swapv3 [tokenAddress] [numberOfWallets] [valuePerWalletInETH]`)
+            }
+            
+            log(`🚀 Starting airdrop-and-swapv3 with ${walletCount} wallets`);
+            const resultAirdrop = await airdropAndSwapV3(tokenAddressV3, walletCount, amountPerWallet, delayBetweenSteps);
+            
+            if (resultAirdrop.success) {
+                log(`✅ airdrop-and-swapv3 completed successfully!`);
+                log(`💰 Net cost: ${resultAirdrop.netCost} ETH`);
+            } else {
+                log(`❌ airdrop-and-swapv3 failed`);
+            }
+            break;
                 
             case 'airdrop-batch':
                 var totalEthForBatch = args[1] ? parseFloat(args[1]) : null;
