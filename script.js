@@ -5264,7 +5264,7 @@ async function main() {
                     throw new Error('PK_MAIN not configured in .env file');
                 }
                 
-                mainWallet = new ethers.Wallet(config.fundingPrivateKey);
+                const mainWalletVolumev2 = new ethers.Wallet(config.fundingPrivateKey);
                 
                 log(`🎯 Starting VolumeV2 for token: ${tokenAddress}`);
                 log(`👛 Wallet range: ${startAt} to ${endAt}`);
@@ -5275,7 +5275,7 @@ async function main() {
                 log(`   • Delay on errors: ${delayOnError}ms`);
                 
                 // Get contract address for the token
-                let contractResult = await getContractAddress(tokenAddress, mainWallet.address, contracts.deployerContract);
+                let contractResult = await getContractAddress(tokenAddress, mainWalletVolumev2.address, contracts.deployerContract);
                 
                 if (!contractResult.success) {
                     log(`❌ No contract found for token. Deploying new contract...`);
@@ -5290,44 +5290,44 @@ async function main() {
                     return;
                 }
                 
-                contractAddress = contractResult.contractAddress;
-                log(`✅ Using existing contract: ${contractAddress}`);
+                const contractAddressVolumeV2 = contractResult.contractAddress;
+                log(`✅ Using existing contract: ${contractAddressVolumeV2}`);
                 
                 // Check contract balances before starting
                 log(`🔍 Checking contract balances...`);
                 
-                contractETHBalance = await provider.getBalance(contractAddress);
-                log(`💰 Contract ETH balance: ${ethers.utils.formatUnits(contractETHBalance, 18)} ETH`);
+                const contractETHBalanceVolumeV2 = await provider.getBalance(contractAddressVolumeV2);
+                log(`💰 Contract ETH balance: ${ethers.utils.formatUnits(contractETHBalanceVolumeV2, 18)} ETH`);
                 
                 // Check token balance in contract
-                tokenContract = new ethers.Contract(tokenAddress, [
+                const tokenContractVolumeV2 = new ethers.Contract(tokenAddress, [
                     "function balanceOf(address) external view returns (uint256)",
                     "function symbol() external view returns (string)",
                     "function decimals() external view returns (uint8)"
                 ], provider);
                 
-                contractTokenBalance;
-                tokenSymbol = "TOKEN";
-                tokenDecimals = 18;
+                let contractTokenBalanceVolumeV2;
+                let tokenSymbolVolumeV2 = "TOKEN";
+                let tokenDecimalsVolumeV2 = 18;
                 
                 try {
-                    contractTokenBalance = await tokenContract.balanceOf(contractAddress);
-                    tokenSymbol = await tokenContract.symbol();
-                    tokenDecimals = await tokenContract.decimals();
-                    log(`🪙 Contract ${tokenSymbol} balance: ${ethers.utils.formatUnits(contractTokenBalance, tokenDecimals)} ${tokenSymbol}`);
+                    contractTokenBalanceVolumeV2 = await tokenContractVolumeV2.balanceOf(contractAddressVolumeV2);
+                    tokenSymbolVolumeV2 = await tokenContractVolumeV2.symbol();
+                    tokenDecimalsVolumeV2 = await tokenContractVolumeV2.decimals();
+                    log(`🪙 Contract ${tokenSymbolVolumeV2} balance: ${ethers.utils.formatUnits(contractTokenBalanceVolumeV2, tokenDecimalsVolumeV2)} ${tokenSymbolVolumeV2}`);
                 } catch (tokenError) {
                     log(`⚠️  Could not check token balance: ${tokenError.message}`);
-                    contractTokenBalance = ethers.BigNumber.from("0");
+                    contractTokenBalanceVolumeV2 = ethers.BigNumber.from("0");
                 }
                 
                 // Check if contract has any balance to work with
-                if (contractETHBalance.eq(0) && contractTokenBalance.eq(0)) {
+                if (contractETHBalanceVolumeV2.eq(0) && contractTokenBalanceVolumeV2.eq(0)) {
                     throw new Error(`
             ❌ Contract has no ETH or token balance!
             
             📋 Instructions:
-            1. Send ETH to contract: ${contractAddress}
-            2. OR send ${tokenSymbol} tokens to contract: ${contractAddress}
+            1. Send ETH to contract: ${contractAddressVolumeV2}
+            2. OR send ${tokenSymbolVolumeV2} tokens to contract: ${contractAddressVolumeV2}
             3. The contract needs balance to execute buy/sell operations
             
             💡 Tip: You can send both ETH and tokens for full functionality
@@ -5335,15 +5335,15 @@ async function main() {
                 }
                 
                 // Show balance warnings
-                if (contractETHBalance.eq(0)) {
-                    log(`⚠️  Contract has no ETH balance - will only be able to sell ${tokenSymbol} tokens`);
+                if (contractETHBalanceVolumeV2.eq(0)) {
+                    log(`⚠️  Contract has no ETH balance - will only be able to sell ${tokenSymbolVolumeV2} tokens`);
                 }
                 
-                if (contractTokenBalance.eq(0)) {
-                    log(`⚠️  Contract has no ${tokenSymbol} balance - will only be able to buy ${tokenSymbol} tokens`);
+                if (contractTokenBalanceVolumeV2.eq(0)) {
+                    log(`⚠️  Contract has no ${tokenSymbolVolumeV2} balance - will only be able to buy ${tokenSymbolVolumeV2} tokens`);
                 }
                 
-                if (contractETHBalance.gt(0) && contractTokenBalance.gt(0)) {
+                if (contractETHBalanceVolumeV2.gt(0) && contractTokenBalanceVolumeV2.gt(0)) {
                     log(`✅ Contract has both ETH and token balance - full buy/sell functionality available`);
                 } else {
                     log(`✅ Contract has sufficient balance to proceed with limited functionality`);
@@ -5351,12 +5351,12 @@ async function main() {
                 
                 var v2SuccessCount = 0;
                 var v2FailCount = 0;
-                totalCycles = 0;
-                currentIndex = startAt;
+                let totalCyclesVolumeV2 = 0;
+                let currentIndexVolumeV2 = startAt;
                 
                 log(`\n🔄 Starting infinite volume bot loop for wallets ${startAt}-${endAt}`);
-                log(`📄 Contract: ${contractAddress}`);
-                log(`🎯 Token: ${tokenAddress} (${tokenSymbol})`);
+                log(`📄 Contract: ${contractAddressVolumeV2}`);
+                log(`🎯 Token: ${tokenAddress} (${tokenSymbolVolumeV2})`);
                 log(`👛 Total wallets in range: ${Math.min(endAt, wallets.length) - startAt}`);
                 log(`⏹️  Press Ctrl+C to stop the infinite loop\n`);
                 
@@ -5373,47 +5373,47 @@ async function main() {
                 // Infinite loop
                 while (true) {
                     try {
-                        const walletProgress = `${currentIndex - startAt + 1}/${Math.min(endAt, wallets.length) - startAt}`;
-                        log(`📊 Cycle ${totalCycles + 1} - Wallet ${walletProgress} (Index: ${currentIndex})`);
+                        const walletProgress = `${currentIndexVolumeV2 - startAt + 1}/${Math.min(endAt, wallets.length) - startAt}`;
+                        log(`📊 Cycle ${totalCyclesVolumeV2 + 1} - Wallet ${walletProgress} (Index: ${currentIndexVolumeV2})`);
                         
-                        const result = await volumeBotV2(currentIndex, wallets, contractAddress);
+                        const result = await volumeBotV2(currentIndexVolumeV2, wallets, contractAddressVolumeV2);
                         
                         if (result && result.success) {
                             v2SuccessCount++;
-                            log(`✅ Wallet ${currentIndex} successful (Total success: ${v2SuccessCount})`);
+                            log(`✅ Wallet ${currentIndexVolumeV2} successful (Total success: ${v2SuccessCount})`);
                         } else {
                             v2FailCount++;
                             const reason = result?.reason || 'unknown';
-                            log(`❌ Wallet ${currentIndex} failed: ${reason} (Total failed: ${v2FailCount})`);
+                            log(`❌ Wallet ${currentIndexVolumeV2} failed: ${reason} (Total failed: ${v2FailCount})`);
                             
                             // Handle specific failure cases
                             if (reason === 'insufficient_funds') {
-                                log(`💸 Wallet ${currentIndex} has insufficient funds - skipping`);
+                                log(`💸 Wallet ${currentIndexVolumeV2} has insufficient funds - skipping`);
                             } else if (reason === 'insufficient_gas') {
-                                log(`⛽ Wallet ${currentIndex} cannot afford gas - skipping`);
+                                log(`⛽ Wallet ${currentIndexVolumeV2} cannot afford gas - skipping`);
                             } else if (reason === 'gas_cost_exceeds_max') {
-                                log(`💰 Wallet ${currentIndex} gas cost exceeds maximum limit - skipping`);
+                                log(`💰 Wallet ${currentIndexVolumeV2} gas cost exceeds maximum limit - skipping`);
                             }
                         }
                         
                         // Move to next wallet
-                        currentIndex++;
+                        currentIndexVolumeV2++;
                         
                         // Check if we've reached the end of the range
-                        if (currentIndex >= Math.min(endAt, wallets.length)) {
-                            totalCycles++;
-                            currentIndex = startAt; // Reset to beginning
+                        if (currentIndexVolumeV2 >= Math.min(endAt, wallets.length)) {
+                            totalCyclesVolumeV2++;
+                            currentIndexVolumeV2 = startAt; // Reset to beginning
                             
                             const totalProcessed = v2SuccessCount + v2FailCount;
                             const successRate = totalProcessed > 0 ? ((v2SuccessCount / totalProcessed) * 100).toFixed(2) : '0.00';
                             
-                            log(`\n🔄 Cycle ${totalCycles} completed! Starting new cycle...`);
+                            log(`\n🔄 Cycle ${totalCyclesVolumeV2} completed! Starting new cycle...`);
                             log(`📈 Cumulative Stats:`);
                             log(`   • Total Processed: ${totalProcessed}`);
                             log(`   • Successful: ${v2SuccessCount}`);
                             log(`   • Failed: ${v2FailCount}`);
                             log(`   • Success Rate: ${successRate}%`);
-                            log(`   • Cycles Completed: ${totalCycles}`);
+                            log(`   • Cycles Completed: ${totalCyclesVolumeV2}`);
                             log(`🔄 Looping back to wallet ${startAt}`);
                             log(`⏱️  Waiting ${delayBetweenCycles}ms before next cycle...\n`);
                             
@@ -5438,16 +5438,16 @@ async function main() {
                         
                     } catch (err) {
                         v2FailCount++;
-                        errorLog(`💥 Unexpected error for wallet ${currentIndex}: ${err.message}`);
+                        errorLog(`💥 Unexpected error for wallet ${currentIndexVolumeV2}: ${err.message}`);
                         
                         // Move to next wallet even on error
-                        currentIndex++;
+                        currentIndexVolumeV2++;
                         
                         // Reset if at end
-                        if (currentIndex >= Math.min(endAt, wallets.length)) {
-                            totalCycles++;
-                            currentIndex = startAt;
-                            log(`🔄 Error occurred, but continuing to next cycle (${totalCycles})`);
+                        if (currentIndexVolumeV2 >= Math.min(endAt, wallets.length)) {
+                            totalCyclesVolumeV2++;
+                            currentIndexVolumeV2 = startAt;
+                            log(`🔄 Error occurred, but continuing to next cycle (${totalCyclesVolumeV2})`);
                             log(`⏱️  Waiting ${delayBetweenCycles}ms after error before next cycle...`);
                             await sleep(delayBetweenCycles);
                         } else {
