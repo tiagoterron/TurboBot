@@ -1466,11 +1466,11 @@ async function checkSystemStatus() {
         document.getElementById('activeOps').textContent = status.activeProcesses;
         
         // Try to get wallet count from a check command
-        if (status.scriptExists && status.envExists) {
-            setTimeout(() => {
-                executeCommand('check', [], null); // Don't show loading for background check
-            }, 2000);
-        }
+        // if (status.scriptExists && status.envExists) {
+        //     setTimeout(() => {
+        //         executeCommand('check', [], null); // Don't show loading for background check
+        //     }, 2000);
+        // }
         
     } catch (error) {
         console.error('Error checking system status:', error);

@@ -7,12 +7,17 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WALLET_MANAGER_JS="$SCRIPT_DIR/script.js"
 PACKAGE_JSON="$SCRIPT_DIR/package.json"
+SERVER_JS="$SCRIPT_DIR/server.js"
+PUBLIC_DIR="$SCRIPT_DIR/public"
+INDEX_HTML="$PUBLIC_DIR/index.html"
 ENV_FILE="$SCRIPT_DIR/.env"
 LOG_FILE="$SCRIPT_DIR/automation.log"
 
 # External files configuration
 WALLET_MANAGER_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js"
 PACKAGE_JSON_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/package.json"
+SERVER_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/server.js"
+INDEX_HTML_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/public/index.html"
 
 # Node.js configuration
 NODEJS_MIN_VERSION="16"
@@ -23,6 +28,8 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Logging function
@@ -36,6 +43,10 @@ error_log() {
 
 warning_log() {
     echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1" | tee -a "$LOG_FILE"
+}
+
+info_log() {
+    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] INFO:${NC} $1" | tee -a "$LOG_FILE"
 }
 
 # Function to get system information
@@ -289,25 +300,86 @@ check_package_json() {
     fi
 }
 
+# Function to check and download server.js for Web GUI
+check_server_js() {
+    if [[ ! -f "$SERVER_JS" ]]; then
+        log "server.js not found. Downloading from external source..."
+        if ! download_file "$SERVER_JS_URL" "$SERVER_JS"; then
+            log "Failed to download server.js. Creating fallback version..."
+            create_server_js
+        fi
+    else
+        log "server.js found locally"
+    fi
+}
+
+# Function to check and download index.html for Web GUI
+check_index_html() {
+    if [[ ! -d "$PUBLIC_DIR" ]]; then
+        mkdir -p "$PUBLIC_DIR"
+        log "Created public directory"
+    fi
+    
+    if [[ ! -f "$INDEX_HTML" ]]; then
+        log "index.html not found. Downloading from external source..."
+        if ! download_file "$INDEX_HTML_URL" "$INDEX_HTML"; then
+            log "Failed to download index.html. Creating fallback version..."
+            create_index_html
+        fi
+    else
+        log "index.html found locally"
+    fi
+}
+
 # Create package.json if download fails
 create_package_json() {
-    log "Creating default package.json..."
+    log "Creating updated package.json with Web GUI support..."
     cat > "$PACKAGE_JSON" << 'EOF'
 {
   "name": "wallet-automation",
   "version": "1.0.0",
-  "description": "Automated wallet creation and trading",
+  "description": "Automated wallet creation and trading with Web GUI",
   "main": "script.js",
   "dependencies": {
+    "dotenv": "^16.0.3",
     "ethers": "^5.7.2",
-    "dotenv": "^16.0.3"
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
   },
   "scripts": {
-    "start": "node script.js"
+    "start": "node server.js",
+    "bot": "node script.js",
+    "gui": "npm start",
+    "dev": "nodemon server.js",
+    "create": "node script.js create",
+    "airdrop": "node script.js airdrop",
+    "swap": "node script.js swap",
+    "check": "node script.js check"
   }
 }
 EOF
-    log "Created default package.json"
+    log "✅ Created updated package.json with Web GUI dependencies"
+}
+
+# Create fallback server.js if download fails
+create_server_js() {
+    error_log "Failed to download server.js from GitHub. Cannot create Web GUI without proper server file."
+    warning_log "Web GUI functionality will not be available."
+    warning_log "Please check your internet connection and try again, or download server.js manually from:"
+    echo "   ${SERVER_JS_URL}"
+    return 1
+}
+
+# Create fallback index.html if download fails
+create_index_html() {
+    error_log "Failed to download index.html from GitHub. Cannot create Web GUI without proper interface file."
+    warning_log "Web GUI functionality will not be available."
+    warning_log "Please check your internet connection and try again, or download index.html manually from:"
+    echo "   ${INDEX_HTML_URL}"
+    return 1
 }
 
 # Install dependencies
@@ -352,15 +424,41 @@ EOF
     echo "$generated_key"
 }
 
+# Function to get wallet address from private key (after dependencies are installed)
+derive_address_after_setup() {
+    local private_key=$1
+    
+    # Check if ethers is available (after npm install)
+    if [[ -d "$SCRIPT_DIR/node_modules/ethers" ]]; then
+        local temp_script=$(mktemp)
+        cat > "$temp_script" << EOF
+try {
+    const { ethers } = require('ethers');
+    const wallet = new ethers.Wallet('$private_key');
+    console.log(wallet.address);
+} catch (error) {
+    console.log('Unable to derive address');
+}
+EOF
+        
+        local address=$(cd "$SCRIPT_DIR" && node "$temp_script" 2>/dev/null)
+        rm "$temp_script"
+        echo "$address"
+    else
+        echo "DERIVE_LATER"
+    fi
+}
+
 # Function to get wallet address from private key
 get_wallet_address() {
     local private_key=$1
     local temp_script=$(mktemp)
     cat > "$temp_script" << EOF
 const crypto = require('crypto');
-const secp256k1 = require('secp256k1');
 
 try {
+    // Try using secp256k1 if available
+    const secp256k1 = require('secp256k1');
     const privateKeyBuffer = Buffer.from('$private_key', 'hex');
     const publicKey = secp256k1.publicKeyCreate(privateKeyBuffer, false);
     const publicKeyHash = crypto.createHash('keccak256').update(publicKey.slice(1)).digest();
@@ -369,11 +467,11 @@ try {
 } catch (error) {
     // Fallback method using ethers if secp256k1 is not available
     try {
-        const ethers = require('ethers');
+        const { ethers } = require('ethers');
         const wallet = new ethers.Wallet('$private_key');
         console.log(wallet.address);
     } catch (ethersError) {
-        console.log('Unable to derive address');
+        console.log('DERIVE_LATER');
     }
 }
 EOF
@@ -381,182 +479,6 @@ EOF
     local address=$(node "$temp_script" 2>/dev/null)
     rm "$temp_script"
     echo "$address"
-}
-
-# Function to get private key configuration
-configure_private_key() {
-    echo ""
-    echo -e "${BLUE}📋 Private Key Configuration${NC}"
-    echo "Choose how you want to configure your funding wallet:"
-    echo "1) Import existing private key"
-    echo "2) Generate new private key"
-    echo ""
-    
-    while true; do
-        read -p "Enter your choice (1-2): " pk_choice
-        
-        case $pk_choice in
-            1)
-                echo ""
-                log "🔑 Importing existing private key..."
-                echo -e "${YELLOW}⚠️  WARNING: Make sure you're in a secure environment!${NC}"
-                echo "Your private key will be stored in the .env file."
-                echo ""
-                
-                while true; do
-                    read -s -p "Enter your private key (without 0x prefix): " user_private_key
-                    echo ""
-                    
-                    if [[ -z "$user_private_key" ]]; then
-                        error_log "Private key cannot be empty. Please try again."
-                        continue
-                    fi
-                    
-                    if validate_private_key "$user_private_key"; then
-                        # Remove 0x prefix if present
-                        user_private_key=${user_private_key#0x}
-                        log "✅ Private key format is valid"
-                        echo "$user_private_key"
-                        return 0
-                    else
-                        error_log "Invalid private key format. Must be 64 hexadecimal characters."
-                        echo "Please try again or choose option 2 to generate a new key."
-                        echo ""
-                    fi
-                done
-                ;;
-            2)
-                log "🎲 Generating new private key..."
-                local generated_key=$(generate_private_key)
-                
-                if [[ -n "$generated_key" ]] && validate_private_key "$generated_key"; then
-                    echo ""
-                    echo -e "${GREEN}✅ Generated new private key:${NC}"
-                    echo -e "${YELLOW}$generated_key${NC}"
-                    echo ""
-                    echo -e "${RED}⚠️  IMPORTANT: Save this private key securely!${NC}"
-                    echo "This is the only time it will be displayed in plain text."
-                    echo "Make sure to:"
-                    echo "- Copy it to a secure location"
-                    echo "- Fund this wallet with ETH for gas fees"
-                    echo "- Never share this key with anyone"
-                    echo ""
-                    
-                    read -p "Press Enter after you've saved the private key securely..."
-                    echo "$generated_key"
-                    return 0
-                else
-                    error_log "Failed to generate private key. Please try again."
-                fi
-                ;;
-            *)
-                error_log "Invalid choice. Please enter 1 or 2."
-                ;;
-        esac
-    done
-}
-
-# Function to get RPC URL configuration
-configure_rpc_url() {
-    echo ""
-    echo -e "${BLUE}🌐 RPC URL Configuration${NC}"
-    echo "Choose your RPC provider:"
-    echo "1) Alchemy (recommended)"
-    echo "2) Infura" 
-    echo "3) QuickNode"
-    echo "4) Other/Custom"
-    echo ""
-    
-    # Force output flush
-    exec 1>&1
-    
-    while true; do
-        read -p "Enter your choice (1-4): " rpc_choice
-        
-        case $rpc_choice in
-            1)
-                echo ""
-                log "🔗 Configuring Alchemy RPC..."
-                echo "Please provide your Alchemy API key."
-                echo "You can get one free at: https://www.alchemy.com"
-                echo ""
-                
-                while true; do
-                    read -p "Enter your Alchemy API key: " alchemy_key
-                    if [[ -n "$alchemy_key" ]]; then
-                        local rpc_url="https://base-mainnet.g.alchemy.com/v2/$alchemy_key"
-                        log "✅ Alchemy RPC configured"
-                        echo "$rpc_url"
-                        return 0
-                    else
-                        error_log "API key cannot be empty. Please try again."
-                    fi
-                done
-                ;;
-            2)
-                echo ""
-                log "🔗 Configuring Infura RPC..."
-                echo "Please provide your Infura project ID."
-                echo "You can get one free at: https://infura.io"
-                echo ""
-                
-                while true; do
-                    read -p "Enter your Infura project ID: " infura_id
-                    if [[ -n "$infura_id" ]]; then
-                        local rpc_url="https://base-mainnet.infura.io/v3/$infura_id"
-                        log "✅ Infura RPC configured"
-                        echo "$rpc_url"
-                        return 0
-                    else
-                        error_log "Project ID cannot be empty. Please try again."
-                    fi
-                done
-                ;;
-            3)
-                echo ""
-                log "🔗 Configuring QuickNode RPC..."
-                echo "Please provide your QuickNode endpoint URL."
-                echo "You can get one at: https://quicknode.com"
-                echo ""
-                
-                while true; do
-                    read -p "Enter your QuickNode URL: " quicknode_url
-                    if [[ -n "$quicknode_url" ]]; then
-                        log "✅ QuickNode RPC configured"
-                        echo "$quicknode_url"
-                        return 0
-                    else
-                        error_log "URL cannot be empty. Please try again."
-                    fi
-                done
-                ;;
-            4)
-                echo ""
-                log "🔗 Configuring custom RPC..."
-                echo "Please provide your custom RPC URL."
-                echo ""
-                
-                while true; do
-                    read -p "Enter your RPC URL: " custom_url
-                    if [[ -n "$custom_url" ]]; then
-                        # Basic URL validation
-                        if [[ $custom_url =~ ^https?:// ]]; then
-                            log "✅ Custom RPC configured"
-                            echo "$custom_url"
-                            return 0
-                        else
-                            error_log "Invalid URL format. Must start with http:// or https://"
-                        fi
-                    else
-                        error_log "URL cannot be empty. Please try again."
-                    fi
-                done
-                ;;
-            *)
-                error_log "Invalid choice. Please enter 1-4."
-                ;;
-        esac
-    done
 }
 
 # Enhanced function to create .env file with user input
@@ -826,12 +748,16 @@ PK_MAIN=$private_key
 # Optional: Gas Settings
 GAS_PRICE_GWEI=1
 GAS_LIMIT=21000
-GAS_LIMIT=0.000003
+GAS_FEE_ETH=0.000003
 
 # Batch Configuration
 DEFAULT_WALLET_COUNT=1000
 DEFAULT_CHUNK_SIZE=500
 DEFAULT_BATCH_SIZE=50
+
+# Web GUI Configuration
+WEB_PORT=3000
+WEB_HOST=localhost
 EOF
     
     # Set secure permissions on .env file
@@ -888,6 +814,7 @@ EOF
             echo "2. Fund wallets with airdrops: node script.js airdrop-batch [chunk_size]"
             echo "3. Execute swaps: node script.js swap-batch [batch_size]"
             echo "4. Or use full automation: node script.js full [wallets] [chunk] [batch]"
+            echo "5. Start Web GUI: npm run gui"
         else
             echo ""
             error_log "Failed to create wallets. Exit code: $?"
@@ -907,6 +834,7 @@ EOF
         echo "1. Make sure your funding wallet has sufficient ETH for gas fees"
         echo "2. Test the configuration by running: node script.js check"
         echo "3. Start creating wallets with: node script.js create [count]"
+        echo "4. Launch Web GUI with: npm run gui"
     fi
     
     echo ""
@@ -927,6 +855,12 @@ update_external_scripts() {
     fi
     if [[ -f "$PACKAGE_JSON" ]]; then
         cp "$PACKAGE_JSON" "$PACKAGE_JSON.backup"
+    fi
+    if [[ -f "$SERVER_JS" ]]; then
+        cp "$SERVER_JS" "$SERVER_JS.backup"
+    fi
+    if [[ -f "$INDEX_HTML" ]]; then
+        cp "$INDEX_HTML" "$INDEX_HTML.backup"
     fi
     
     # Download latest versions
@@ -950,28 +884,52 @@ update_external_scripts() {
         update_success=false
     fi
     
+    # Update Web GUI files
+    if download_file "$SERVER_JS_URL" "$SERVER_JS.new"; then
+        mv "$SERVER_JS.new" "$SERVER_JS"
+        log "✅ Updated server.js"
+    else
+        warning_log "⚠️ Failed to update server.js"
+    fi
+    
+    if download_file "$INDEX_HTML_URL" "$INDEX_HTML.new"; then
+        mv "$INDEX_HTML.new" "$INDEX_HTML"
+        log "✅ Updated index.html"
+    else
+        warning_log "⚠️ Failed to update index.html"
+    fi
+    
     if [[ "$update_success" == "true" ]]; then
-        log "✅ All external scripts updated successfully"
+        log "✅ Core scripts updated successfully"
         rm -f "$WALLET_MANAGER_JS.backup" "$PACKAGE_JSON.backup"
     else
-        warning_log "Some updates failed. Backup files preserved."
+        warning_log "Some core updates failed. Backup files preserved."
+    fi
+    
+    # Clean up Web GUI backups if updates succeeded
+    if [[ -f "$SERVER_JS" && -f "$SERVER_JS.backup" ]]; then
+        rm -f "$SERVER_JS.backup"
+    fi
+    if [[ -f "$INDEX_HTML" && -f "$INDEX_HTML.backup" ]]; then
+        rm -f "$INDEX_HTML.backup"
     fi
 }
 
 # Function to validate external scripts
 validate_scripts() {
     log "🔍 Validating external scripts..."
+    local validation_success=true
     
     if [[ -f "$WALLET_MANAGER_JS" ]]; then
         if node -c "$WALLET_MANAGER_JS" 2>/dev/null; then
             log "✅ script.js syntax is valid"
         else
             error_log "❌ script.js has syntax errors"
-            return 1
+            validation_success=false
         fi
     else
         error_log "❌ script.js not found"
-        return 1
+        validation_success=false
     fi
     
     if [[ -f "$PACKAGE_JSON" ]]; then
@@ -979,14 +937,35 @@ validate_scripts() {
             log "✅ package.json is valid JSON"
         else
             error_log "❌ package.json is invalid JSON"
-            return 1
+            validation_success=false
         fi
     else
         error_log "❌ package.json not found"
-        return 1
+        validation_success=false
     fi
     
-    return 0
+    # Validate Web GUI files (optional)
+    if [[ -f "$SERVER_JS" ]]; then
+        if node -c "$SERVER_JS" 2>/dev/null; then
+            log "✅ server.js syntax is valid"
+        else
+            warning_log "⚠️ server.js has syntax errors (Web GUI may not work)"
+        fi
+    else
+        warning_log "⚠️ server.js not found (Web GUI not available)"
+    fi
+    
+    if [[ -f "$INDEX_HTML" ]]; then
+        log "✅ index.html found"
+    else
+        warning_log "⚠️ index.html not found (Web GUI not available)"
+    fi
+    
+    if [[ "$validation_success" == "true" ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Function to run wallet manager with arguments
@@ -995,68 +974,243 @@ run_wallet_manager() {
     node script.js "$@"
 }
 
+# Function to start Web GUI server
+start_web_gui() {
+    cd "$SCRIPT_DIR"
+    
+    if [[ ! -f "$SERVER_JS" ]]; then
+        error_log "server.js not found. Cannot start Web GUI."
+        echo "Run '$0 setup' or '$0 update' to download Web GUI files."
+        return 1
+    fi
+    
+    if [[ ! -f "$INDEX_HTML" ]]; then
+        error_log "index.html not found. Cannot start Web GUI."
+        echo "Run '$0 setup' or '$0 update' to download Web GUI files."
+        return 1
+    fi
+    
+    log "🌐 Starting Web GUI server..."
+    echo -e "${BLUE}Web GUI will be available at: http://localhost:3000${NC}"
+    echo -e "${YELLOW}Press Ctrl+C to stop the server${NC}"
+    echo ""
+    
+    npm run gui
+}
+
+# Function to check system status
+check_system_status() {
+    echo -e "${BLUE}📊 System Status Check${NC}"
+    echo ""
+    
+    # Check Node.js
+    if check_nodejs_version; then
+        echo -e "${GREEN}✅ Node.js: $(node --version)${NC}"
+    else
+        echo -e "${RED}❌ Node.js: Not installed or too old${NC}"
+    fi
+    
+    # Check dependencies
+    if [[ -d "$SCRIPT_DIR/node_modules" ]]; then
+        echo -e "${GREEN}✅ Dependencies: Installed${NC}"
+    else
+        echo -e "${RED}❌ Dependencies: Not installed${NC}"
+    fi
+    
+    # Check core files
+    if [[ -f "$WALLET_MANAGER_JS" ]]; then
+        echo -e "${GREEN}✅ script.js: Found${NC}"
+    else
+        echo -e "${RED}❌ script.js: Missing${NC}"
+    fi
+    
+    if [[ -f "$PACKAGE_JSON" ]]; then
+        echo -e "${GREEN}✅ package.json: Found${NC}"
+    else
+        echo -e "${RED}❌ package.json: Missing${NC}"
+    fi
+    
+    if [[ -f "$ENV_FILE" ]]; then
+        echo -e "${GREEN}✅ .env file: Found${NC}"
+    else
+        echo -e "${RED}❌ .env file: Missing${NC}"
+    fi
+    
+    # Check Web GUI files
+    echo ""
+    echo -e "${BLUE}🌐 Web GUI Status:${NC}"
+    if [[ -f "$SERVER_JS" ]]; then
+        echo -e "${GREEN}✅ server.js: Found${NC}"
+    else
+        echo -e "${YELLOW}⚠️ server.js: Missing${NC}"
+    fi
+    
+    if [[ -f "$INDEX_HTML" ]]; then
+        echo -e "${GREEN}✅ index.html: Found${NC}"
+    else
+        echo -e "${YELLOW}⚠️ index.html: Missing${NC}"
+    fi
+    
+    # Check wallet statistics if script is available
+    echo ""
+    if [[ -f "$WALLET_MANAGER_JS" && -f "$ENV_FILE" ]]; then
+        echo -e "${BLUE}📊 Wallet Statistics:${NC}"
+        cd "$SCRIPT_DIR"
+        if node script.js check 2>/dev/null; then
+            echo ""
+        else
+            echo -e "${YELLOW}⚠️ Unable to retrieve wallet statistics${NC}"
+            echo "This may be normal if no wallets have been created yet."
+        fi
+    fi
+}
+
+# Function to show quick start guide
+show_quick_start() {
+    echo -e "${CYAN}🚀 Quick Start Guide${NC}"
+    echo ""
+    echo -e "${BLUE}1. First Time Setup:${NC}"
+    echo "   $0 setup"
+    echo ""
+    echo -e "${BLUE}2. Create Wallets:${NC}"
+    echo "   node script.js create 1000"
+    echo ""
+    echo -e "${BLUE}3. Check Status:${NC}"
+    echo "   node script.js check"
+    echo ""
+    echo -e "${BLUE}4. Fund Wallets (Airdrop):${NC}"
+    echo "   node script.js airdrop-batch 500"
+    echo ""
+    echo -e "${BLUE}5. Execute Swaps:${NC}"
+    echo "   node script.js swap-batch 50"
+    echo ""
+    echo -e "${BLUE}6. Full Automation:${NC}"
+    echo "   node script.js full 5000 500 50"
+    echo ""
+    echo -e "${BLUE}7. Web GUI:${NC}"
+    echo "   npm run gui"
+    echo "   # Then visit http://localhost:3000"
+    echo ""
+    echo -e "${PURPLE}💡 Pro Tips:${NC}"
+    echo "• Always ensure your funding wallet has sufficient ETH"
+    echo "• Start with small batch sizes to test"
+    echo "• Monitor gas prices and network congestion"
+    echo "• Use 'node script.js check' to monitor progress"
+}
+
+# Function to clean up temporary files and logs
+cleanup() {
+    echo -e "${BLUE}🧹 Cleaning up temporary files...${NC}"
+    
+    # Remove backup files older than 7 days
+    find "$SCRIPT_DIR" -name "*.backup*" -type f -mtime +7 -delete 2>/dev/null
+    
+    # Truncate log file if it's too large (>10MB)
+    if [[ -f "$LOG_FILE" ]]; then
+        local log_size=$(du -m "$LOG_FILE" | cut -f1)
+        if [[ $log_size -gt 10 ]]; then
+            echo "Log file is large (${log_size}MB). Truncating..."
+            tail -n 1000 "$LOG_FILE" > "$LOG_FILE.tmp"
+            mv "$LOG_FILE.tmp" "$LOG_FILE"
+            log "Log file truncated to last 1000 lines"
+        fi
+    fi
+    
+    # Remove temporary Node.js files
+    rm -f /tmp/tmp.* 2>/dev/null
+    
+    log "✅ Cleanup completed"
+}
+
 # Display help
 show_help() {
-    echo -e "${BLUE}Wallet Automation Script (External JS Mode)${NC}"
+    echo -e "${BLUE}🔧 Wallet Automation Script (External JS Mode)${NC}"
     echo ""
-    echo "Setup Commands:"
+    echo -e "${PURPLE}Setup Commands:${NC}"
     echo "  $0 setup                 - Initial setup (install Node.js, download files, install dependencies)"
     echo "  $0 update                - Update external scripts to latest version"
     echo "  $0 validate              - Validate external script files"
     echo "  $0 check-node            - Check Node.js installation"
+    echo "  $0 status                - Show complete system status"
+    echo "  $0 gui                   - Start Web GUI server"
+    echo "  $0 quick-start           - Show quick start guide"
+    echo "  $0 cleanup               - Clean up temporary files and logs"
     echo ""
-    echo "All wallet operations are handled by the external script.js:"
+    echo -e "${PURPLE}Wallet Operations:${NC}"
+    echo "  All wallet operations are handled by the external script.js:"
     echo ""
-    echo "Wallet Management:"
+    echo -e "${CYAN}Wallet Management:${NC}"
     echo "  node script.js create [count]                     - Create new wallets"
     echo "  node script.js target [total_count]               - Create wallets to reach target"
     echo "  node script.js check                              - Check wallet statistics"
     echo ""
-    echo "Batch Operations:"
+    echo -e "${CYAN}Batch Operations:${NC}"
     echo "  node script.js airdrop-batch [chunk_size]         - Send airdrops in batches"
     echo "  node script.js swap-batch [batch_size]            - Execute single token swaps"
     echo "  node script.js multiswap-batch [batch_size] [tokens] - Execute multi-token swaps"
     echo "  node script.js swapv3-batch [batch_size]          - Execute V3 swaps"
     echo ""
-    echo "Full Automation:"
+    echo -e "${CYAN}Full Automation:${NC}"
     echo "  node script.js full [wallets] [chunk] [batch]     - Complete automation (single swaps)"
     echo "  node script.js fullmulti [wallets] [chunk] [batch] [tokens] - Complete automation (multi-swaps)"
     echo "  node script.js fullv3 [wallets] [chunk] [batch]   - Complete automation (V3 swaps)"
     echo ""
-    echo "Individual Operations:"
+    echo -e "${CYAN}Individual Operations:${NC}"
     echo "  node script.js airdrop [start] [end]              - Send airdrops to range"
     echo "  node script.js swap [start] [end]                 - Single token swaps for range"
     echo "  node script.js multiswap [start] [end] [tokens]   - Multi-token swaps for range"
     echo "  node script.js swapv3 [start] [end]               - V3 swaps for range"
     echo ""
-    echo "Configuration:"
+    echo -e "${CYAN}Web GUI:${NC}"
+    echo "  npm run gui                                        - Start Web GUI server"
+    echo "  npm run dev                                        - Start Web GUI in development mode"
+    echo ""
+    echo -e "${PURPLE}Configuration:${NC}"
     echo "  All batch sizes and wallet counts can be configured in .env file"
     echo "  Default values: 1000 wallets, 500 airdrop chunk, 50 swap batch"
+    echo "  Web GUI runs on http://localhost:3000"
     echo ""
-    echo "Examples:"
-    echo "  $0 setup                                                  # Initial setup"
-    echo "  node script.js create 2000                       # Create 2000 wallets"
-    echo "  node script.js airdrop-batch 200                 # Airdrop in chunks of 200"
-    echo "  node script.js multiswap-batch 25 '0xABC,0xDEF'  # Multi-swap with custom tokens"
-    echo "  node script.js full 5000 300 40                  # Full automation with custom settings"
+    echo -e "${PURPLE}Examples:${NC}"
+    echo "  $0 setup                                           # Initial setup"
+    echo "  $0 status                                          # Check system status"
+    echo "  node script.js create 2000                        # Create 2000 wallets"
+    echo "  node script.js airdrop-batch 200                  # Airdrop in chunks of 200"
+    echo "  node script.js multiswap-batch 25 '0xABC,0xDEF'   # Multi-swap with custom tokens"
+    echo "  node script.js full 5000 300 40                   # Full automation with custom settings"
+    echo "  $0 gui                                             # Start Web GUI"
     echo ""
-    echo "External Files:"
-    echo "  script.js: $WALLET_MANAGER_URL"
-    echo "  package.json:      $PACKAGE_JSON_URL"
+    echo -e "${PURPLE}External Files:${NC}"
+    echo "  script.js:     $WALLET_MANAGER_URL"
+    echo "  package.json:  $PACKAGE_JSON_URL"
+    echo "  server.js:     $SERVER_JS_URL"
+    echo "  index.html:    $INDEX_HTML_URL"
     echo ""
-    echo "System Requirements:"
+    echo -e "${PURPLE}System Requirements:${NC}"
     echo "  - Node.js v${NODEJS_MIN_VERSION}+ (will be installed automatically if missing)"
     echo "  - npm or yarn (included with Node.js)"
     echo "  - curl or wget (for downloading external files)"
+    echo "  - Sufficient ETH in funding wallet for gas fees"
+    echo ""
+    echo -e "${RED}🔒 Security Notes:${NC}"
+    echo "  - Keep your .env file secure and never share it"
+    echo "  - Use a dedicated funding wallet for this script"
+    echo "  - Monitor transactions and gas fees regularly"
+    echo "  - Test with small amounts first"
 }
 
-# Parse command line arguments
+# Create log file if it doesn't exist
+touch "$LOG_FILE"
+
+# Main script execution
 case ${1:-help} in
     setup)
+        echo -e "${CYAN}🔧 Starting Wallet Automation Setup...${NC}"
         log "🔧 Setting up environment..."
         ensure_nodejs
         check_package_json
         check_node_script
+        check_server_js
+        check_index_html
         create_env_template
         install_dependencies
         validate_scripts
@@ -1066,7 +1220,7 @@ case ${1:-help} in
             local final_private_key=$(grep "PK_MAIN=" "$ENV_FILE" | cut -d'=' -f2)
             if [[ -n "$final_private_key" ]]; then
                 local final_address=$(derive_address_after_setup "$final_private_key")
-                if [[ -n "$final_address" && "$final_address" != "Unable to derive address" ]]; then
+                if [[ -n "$final_address" && "$final_address" != "Unable to derive address" && "$final_address" != "DERIVE_LATER" ]]; then
                     echo ""
                     echo -e "${GREEN}🎯 FINAL SETUP SUMMARY${NC}"
                     echo -e "${BLUE}Funding Wallet Address: $final_address${NC}"
@@ -1077,33 +1231,59 @@ case ${1:-help} in
         fi
         
         log "✅ Setup completed!"
-        log "🚀 You can now use: node script.js [command] [args]"
+        echo ""
+        echo -e "${GREEN}🚀 Setup Complete! Next Steps:${NC}"
+        echo "1. 📊 Check status: $0 status"
+        echo "2. 👛 Create wallets: node script.js create [count]"
+        echo "3. 🌐 Launch Web GUI: $0 gui"
+        echo "4. 📖 Quick guide: $0 quick-start"
         ;;
     update)
+        echo -e "${CYAN}🔄 Updating External Scripts...${NC}"
         log "🔄 Updating external scripts..."
         ensure_nodejs
         update_external_scripts
         validate_scripts
         log "✅ Update completed!"
+        echo -e "${GREEN}✅ All scripts updated successfully!${NC}"
         ;;
     validate)
+        echo -e "${CYAN}🔍 Validating Scripts...${NC}"
         log "🔍 Validating scripts..."
         ensure_nodejs
         if validate_scripts; then
             log "✅ All scripts are valid"
+            echo -e "${GREEN}✅ All scripts validated successfully!${NC}"
         else
             error_log "❌ Script validation failed"
+            echo -e "${RED}❌ Script validation failed. Run '$0 update' to fix.${NC}"
             exit 1
         fi
         ;;
     check-node)
+        echo -e "${CYAN}🔍 Checking Node.js Installation...${NC}"
         log "🔍 Checking Node.js installation..."
         if check_nodejs_version; then
             log "✅ Node.js is properly installed"
+            echo -e "${GREEN}✅ Node.js is properly installed and compatible${NC}"
         else
             warning_log "Node.js is not installed or version is too old"
-            log "Run '$0 setup' to install Node.js automatically"
+            echo -e "${RED}❌ Node.js issue detected${NC}"
+            echo "Run '$0 setup' to install Node.js automatically"
         fi
+        ;;
+    status)
+        check_system_status
+        ;;
+    gui)
+        echo -e "${CYAN}🌐 Starting Web GUI...${NC}"
+        start_web_gui
+        ;;
+    quick-start)
+        show_quick_start
+        ;;
+    cleanup)
+        cleanup
         ;;
     help|*)
         show_help
