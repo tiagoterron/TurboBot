@@ -861,29 +861,16 @@ update_external_scripts() {
     done
     
     # Create backup function with error checking
-   backup_file() {
-    local file="$1"
-    echo "DEBUG: Checking if $file exists..."
-    
-    if [[ -f "$file" ]]; then
-        echo "DEBUG: File $file exists, attempting backup..."
-        ls -la "$file"
-        
-        if cp "$file" "$file.backup"; then
-            echo "DEBUG: Backup successful"
-            ls -la "$file.backup"
+    backup_file() {
+        local file="$1"
+        if [[ -f "$file" ]]; then
+            if ! cp "$file" "$file.backup"; then
+                error_log "❌ Failed to backup $file"
+                return 1
+            fi
             log "📋 Backed up $file"
-            return 0
-        else
-            echo "DEBUG: Backup failed - cp command returned $?"
-            error_log "❌ Failed to backup $file"
-            return 1
         fi
-    else
-        echo "DEBUG: File $file does not exist, skipping backup"
-        log "ℹ️ File $file doesn't exist, skipping backup"
-    fi
-}
+    }
     
     # Backup existing files
     backup_file "$WALLET_MANAGER_JS" || return 1
@@ -936,17 +923,30 @@ update_external_scripts() {
     
     # Cleanup and restore on failure
     if [[ "$update_success" == "true" ]]; then
-        log "✅ Core scripts updated successfully"
-        rm -f "$WALLET_MANAGER_JS.backup" "$PACKAGE_JSON.backup" "$SERVER_JS.backup" "$INDEX_HTML.backup"
-    else
-        warning_log "❌ Some core updates failed. Restoring backups..."
-        
-        # Restore backups
-        [[ -f "$WALLET_MANAGER_JS.backup" ]] && mv "$WALLET_MANAGER_JS.backup" "$WALLET_MANAGER_JS"
-        [[ -f "$PACKAGE_JSON.backup" ]] && mv "$PACKAGE_JSON.backup" "$PACKAGE_JSON"
-        
-        return 1
+    log "✅ Core scripts updated successfully"
+    
+    # Check if files actually changed before cleanup
+    if [[ -f "$WALLET_MANAGER_JS.backup" ]]; then
+        if cmp -s "$WALLET_MANAGER_JS" "$WALLET_MANAGER_JS.backup"; then
+            warning_log "⚠️ script.js: No changes detected (identical to backup)"
+        else
+            log "✅ script.js: File successfully updated with changes"
+        fi
     fi
+    
+    if [[ -f "$PACKAGE_JSON.backup" ]]; then
+        if cmp -s "$PACKAGE_JSON" "$PACKAGE_JSON.backup"; then
+            warning_log "⚠️ package.json: No changes detected (identical to backup)"  
+        else
+            log "✅ package.json: File successfully updated with changes"
+        fi
+    fi
+    
+    # Now clean up backups
+    rm -f "$WALLET_MANAGER_JS.backup" "$PACKAGE_JSON.backup"
+else
+    warning_log "Some core updates failed. Backup files preserved."
+fi
 }
 
 # Function to validate external scripts
