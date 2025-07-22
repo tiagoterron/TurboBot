@@ -849,69 +849,90 @@ EOF
 update_external_scripts() {
     log "🔄 Updating external scripts..."
     
-    # Backup existing files
-    if [[ -f "$WALLET_MANAGER_JS" ]]; then
-        cp "$WALLET_MANAGER_JS" "$WALLET_MANAGER_JS.backup"
-    fi
-    if [[ -f "$PACKAGE_JSON" ]]; then
-        cp "$PACKAGE_JSON" "$PACKAGE_JSON.backup"
-    fi
-    if [[ -f "$SERVER_JS" ]]; then
-        cp "$SERVER_JS" "$SERVER_JS.backup"
-    fi
-    if [[ -f "$INDEX_HTML" ]]; then
-        cp "$INDEX_HTML" "$INDEX_HTML.backup"
-    fi
+    # Validate required variables
+    local required_vars=("WALLET_MANAGER_JS" "PACKAGE_JSON" "SERVER_JS" "INDEX_HTML" 
+                         "WALLET_MANAGER_URL" "PACKAGE_JSON_URL" "SERVER_JS_URL" "INDEX_HTML_URL")
     
-    # Download latest versions
+    for var in "${required_vars[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            error_log "❌ Required variable $var is not set"
+            return 1
+        fi
+    done
+    
+    # Create backup function with error checking
+    backup_file() {
+        local file="$1"
+        if [[ -f "$file" ]]; then
+            if ! cp "$file" "$file.backup"; then
+                error_log "❌ Failed to backup $file"
+                return 1
+            fi
+            log "📋 Backed up $file"
+        fi
+    }
+    
+    # Backup existing files
+    backup_file "$WALLET_MANAGER_JS" || return 1
+    backup_file "$PACKAGE_JSON" || return 1
+    backup_file "$SERVER_JS" || return 1
+    backup_file "$INDEX_HTML" || return 1
+    
     local update_success=true
     
-    if download_file "$WALLET_MANAGER_URL" "$WALLET_MANAGER_JS.new"; then
-        mv "$WALLET_MANAGER_JS.new" "$WALLET_MANAGER_JS"
-        log "✅ Updated script.js"
-    else
-        error_log "❌ Failed to update script.js"
+    # Update with better error handling
+    update_file() {
+        local url="$1"
+        local target="$2"
+        local name="$3"
+        
+        if download_file "$url" "$target.new"; then
+            if mv "$target.new" "$target"; then
+                log "✅ Updated $name"
+                return 0
+            else
+                error_log "❌ Failed to move $name to final location"
+                rm -f "$target.new"
+                return 1
+            fi
+        else
+            error_log "❌ Failed to download $name"
+            rm -f "$target.new"
+            return 1
+        fi
+    }
+    
+    # Update core files
+    if ! update_file "$WALLET_MANAGER_URL" "$WALLET_MANAGER_JS" "script.js"; then
         update_success=false
     fi
     
-    if download_file "$PACKAGE_JSON_URL" "$PACKAGE_JSON.new"; then
-        mv "$PACKAGE_JSON.new" "$PACKAGE_JSON"
-        log "✅ Updated package.json"
+    if ! update_file "$PACKAGE_JSON_URL" "$PACKAGE_JSON" "package.json"; then
+        update_success=false
+    else
         log "🔄 Reinstalling dependencies..."
-        install_dependencies
-    else
-        error_log "❌ Failed to update package.json"
-        update_success=false
+        if ! install_dependencies; then
+            error_log "❌ Failed to reinstall dependencies"
+            update_success=false
+        fi
     fi
     
-    # Update Web GUI files
-    if download_file "$SERVER_JS_URL" "$SERVER_JS.new"; then
-        mv "$SERVER_JS.new" "$SERVER_JS"
-        log "✅ Updated server.js"
-    else
-        warning_log "⚠️ Failed to update server.js"
-    fi
+    # Update Web GUI files (non-critical)
+    update_file "$SERVER_JS_URL" "$SERVER_JS" "server.js" || warning_log "⚠️ Failed to update server.js"
+    update_file "$INDEX_HTML_URL" "$INDEX_HTML" "index.html" || warning_log "⚠️ Failed to update index.html"
     
-    if download_file "$INDEX_HTML_URL" "$INDEX_HTML.new"; then
-        mv "$INDEX_HTML.new" "$INDEX_HTML"
-        log "✅ Updated index.html"
-    else
-        warning_log "⚠️ Failed to update index.html"
-    fi
-    
+    # Cleanup and restore on failure
     if [[ "$update_success" == "true" ]]; then
         log "✅ Core scripts updated successfully"
-        rm -f "$WALLET_MANAGER_JS.backup" "$PACKAGE_JSON.backup"
+        rm -f "$WALLET_MANAGER_JS.backup" "$PACKAGE_JSON.backup" "$SERVER_JS.backup" "$INDEX_HTML.backup"
     else
-        warning_log "Some core updates failed. Backup files preserved."
-    fi
-    
-    # Clean up Web GUI backups if updates succeeded
-    if [[ -f "$SERVER_JS" && -f "$SERVER_JS.backup" ]]; then
-        rm -f "$SERVER_JS.backup"
-    fi
-    if [[ -f "$INDEX_HTML" && -f "$INDEX_HTML.backup" ]]; then
-        rm -f "$INDEX_HTML.backup"
+        warning_log "❌ Some core updates failed. Restoring backups..."
+        
+        # Restore backups
+        [[ -f "$WALLET_MANAGER_JS.backup" ]] && mv "$WALLET_MANAGER_JS.backup" "$WALLET_MANAGER_JS"
+        [[ -f "$PACKAGE_JSON.backup" ]] && mv "$PACKAGE_JSON.backup" "$PACKAGE_JSON"
+        
+        return 1
     fi
 }
 

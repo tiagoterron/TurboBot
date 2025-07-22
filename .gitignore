@@ -5,3 +5,4 @@ ecosystem.config.js
 pm2.config.js
 solidity
 test
+turbo-bot
