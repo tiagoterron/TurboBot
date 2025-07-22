@@ -1,4 +1,3 @@
-//V 1.0.1
 const { ethers, utils } = require('ethers');
 const fs = require('fs');
 const path = require('path');

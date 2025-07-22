@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TurboBot Web Controller</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            color: #4f46e5;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 1.1rem;
+        }
+
+        .status-bar {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #10b981;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 5px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            background: rgba(255, 255, 255, 0.95);
+            color: #4f46e5;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab-content {
+            display: none;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section h3 {
+            color: #4f46e5;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .form-group input, .form-group select {
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(107, 114, 128, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+        }
+
+        .terminal {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .terminal::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .terminal::-webkit-scrollbar-track {
+            background: #2a2a2a;
+        }
+
+        .terminal::-webkit-scrollbar-thumb {
+            background: #4a4a4a;
+            border-radius: 4px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .log-success {
+            color: #10b981;
+        }
+
+        .log-error {
+            color: #ef4444;
+        }
+
+        .log-warning {
+            color: #f59e0b;
+        }
+
+        .log-info {
+            color: #3b82f6;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4f46e5, #7c3aed);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #4f46e5;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
+        .config-section {
+            background: rgba(248, 250, 252, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4f46e5;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert-info {
+            background: rgba(59, 130, 246, 0.1);
+            color: #1e40af;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.1);
+            color: #92400e;
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading.show {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #4f46e5;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .command-history {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(248, 250, 252, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .history-item {
+            padding: 5px 10px;
+            margin: 2px 0;
+            background: white;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .history-item:hover {
+            background: #f3f4f6;
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .button-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tabs {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 TurboBot Web Controller</h1>
+            <p>Enhanced DeFi Automation Tool with Gas Management & V3 Support</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot" id="connectionStatus"></div>
+                <span id="connectionText">Disconnected</span>
+            </div>
+            <div class="status-item">
+                <span>Gas Price: <strong id="gasPrice">-- Gwei</strong></span>
+            </div>
+            <div class="status-item">
+                <span>ETH Price: <strong id="ethPrice">$--</strong></span>
+            </div>
+            <div class="status-item">
+                <span>Active Operations: <strong id="activeOps">0</strong></span>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('setup')">🔧 Setup</button>
+            <button class="tab" onclick="switchTab('wallets')">👛 Wallets</button>
+            <button class="tab" onclick="switchTab('trading')">⚡ Trading</button>
+            <button class="tab" onclick="switchTab('automation')">🔄 Automation</button>
+            <button class="tab" onclick="switchTab('monitoring')">📊 Monitoring</button>
+        </div>
+
+        <!-- Setup Tab -->
+        <div id="setup" class="tab-content active">
+            <div class="section">
+                <h3>🔧 Initial Setup</h3>
+                <div class="alert alert-info">
+                    <span>ℹ️</span>
+                    <span>Complete the initial setup to configure your environment, RPC, and funding wallet.</span>
+                </div>
+                
+                <div class="button-grid">
+                    <button class="btn btn-primary" onclick="executeCommand('setup')">
+                        🚀 Run Complete Setup
+                    </button>
+                    <button class="btn btn-secondary" onclick="executeCommand('update')">
+                        📥 Update Scripts
+                    </button>
+                    <button class="btn btn-secondary" onclick="executeCommand('validate')">
+                        ✅ Validate Scripts
+                    </button>
+                    <button class="btn btn-secondary" onclick="executeCommand('check-node')">
+                        📋 Check Node.js
+                    </button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>⚙️ Configuration</h3>
+                <div class="config-section">
+                    <h4>Environment Variables</h4>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>RPC URL</label>
+                            <input type="text" id="rpcUrl" placeholder="https://base-mainnet.g.alchemy.com/v2/API_KEY">
+                        </div>
+                        <div class="form-group">
+                            <label>Gas Max (ETH)</label>
+                            <input type="number" id="gasMax" step="0.000001" placeholder="0.000003">
+                        </div>
+                        <div class="form-group">
+                            <label>Default Wallet Count</label>
+                            <input type="number" id="walletCount" placeholder="1000">
+                        </div>
+                        <div class="form-group">
+                            <label>Default Chunk Size</label>
+                            <input type="number" id="chunkSize" placeholder="500">
+                        </div>
+                    </div>
+                    <button class="btn btn-success" onclick="updateConfig()">💾 Save Configuration</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wallets Tab -->
+        <div id="wallets" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalWallets">0</div>
+                    <div class="stat-label">Total Wallets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="fundedWallets">0</div>
+                    <div class="stat-label">Funded Wallets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalBalance">0.000</div>
+                    <div class="stat-label">Total ETH</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avgBalance">0.000</div>
+                    <div class="stat-label">Avg Balance</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>👛 Wallet Management</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Number of Wallets to Create</label>
+                        <input type="number" id="createCount" placeholder="100" value="100">
+                    </div>
+                    <div class="form-group">
+                        <label>Target Total Wallets</label>
+                        <input type="number" id="targetCount" placeholder="1000">
+                    </div>
+                </div>
+                <div class="button-grid">
+                    <button class="btn btn-primary" onclick="createWallets()">
+                        ➕ Create Wallets
+                    </button>
+                    <button class="btn btn-primary" onclick="targetWallets()">
+                        🎯 Create to Target
+                    </button>
+                    <button class="btn btn-secondary" onclick="checkWallets()">
+                        📊 Check Wallets
+                    </button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>💸 Airdrop Configuration</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Chunk Size</label>
+                        <input type="number" id="airdropChunk" placeholder="500" value="500">
+                    </div>
+                    <div class="form-group">
+                        <label>Total ETH to Distribute</label>
+                        <input type="number" id="airdropTotal" step="0.001" placeholder="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>Delay Between Chunks (ms)</label>
+                        <input type="number" id="airdropDelay" placeholder="3000" value="3000">
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="startAirdrop()">
+                    💰 Start Airdrop Batch
+                </button>
+            </div>
+        </div>
+
+        <!-- Trading Tab -->
+        <div id="trading" class="tab-content">
+            <div class="section">
+                <h3>⚡ Trading Operations</h3>
+                
+                <div class="config-section">
+                    <h4>Token Configuration</h4>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Token Address (Single)</label>
+                            <input type="text" id="singleToken" placeholder="0x...">
+                        </div>
+                        <div class="form-group">
+                            <label>Multiple Tokens (comma-separated)</label>
+                            <input type="text" id="multiTokens" placeholder="0x...,0x...,0x...">
+                        </div>
+                        <div class="form-group">
+                            <label>Batch Size</label>
+                            <input type="number" id="tradeBatchSize" placeholder="50" value="50">
+                        </div>
+                        <div class="form-group">
+                            <label>Delay Between Batches (ms)</label>
+                            <input type="number" id="tradeBatchDelay" placeholder="1000" value="1000">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="button-grid">
+                    <div class="tooltip">
+                        <button class="btn btn-primary" onclick="startSwapBatch()">
+                            🔄 V2 Swap Batch
+                        </button>
+                        <span class="tooltiptext">Execute V2 swaps for single token across multiple wallets</span>
+                    </div>
+                    
+                    <div class="tooltip">
+                        <button class="btn btn-primary" onclick="startMultiSwapBatch()">
+                            🔄 V2 Multi-Swap Batch
+                        </button>
+                        <span class="tooltiptext">Execute V2 swaps for multiple tokens across wallets</span>
+                    </div>
+                    
+                    <div class="tooltip">
+                        <button class="btn btn-secondary" onclick="startV3SwapBatch()">
+                            ⚡ V3 Swap Batch
+                        </button>
+                        <span class="tooltiptext">Execute V3 swaps with enhanced fee tier support</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>📈 Individual Operations</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Start Wallet Index</label>
+                        <input type="number" id="startIndex" placeholder="0" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>End Wallet Index</label>
+                        <input type="number" id="endIndex" placeholder="100" value="100">
+                    </div>
+                </div>
+                <div class="button-grid">
+                    <button class="btn btn-primary" onclick="individualSwap()">
+                        🔄 V2 Swap Range
+                    </button>
+                    <button class="btn btn-primary" onclick="individualMultiSwap()">
+                        🔄 V2 Multi-Swap Range
+                    </button>
+                    <button class="btn btn-secondary" onclick="individualV3Swap()">
+                        ⚡ V3 Swap Range
+                    </button>
+                    <button class="btn btn-secondary" onclick="individualV3MultiSwap()">
+                        ⚡ V3 Multi-Swap Range
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Automation Tab -->
+        <div id="automation" class="tab-content">
+            <div class="section">
+                <h3>🔄 Continuous Automation</h3>
+                <div class="alert alert-warning">
+                    <span>⚠️</span>
+                    <span>These operations run continuously until stopped. Monitor gas costs and wallet balances.</span>
+                </div>
+
+                <div class="config-section">
+                    <h4>Automation Parameters</h4>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Cycle Delay (ms)</label>
+                            <input type="number" id="cycleDelay" placeholder="2000" value="2000">
+                        </div>
+                        <div class="form-group">
+                            <label>Funding Amount (ETH)</label>
+                            <input type="number" id="fundingAmount" step="0.000001" placeholder="0.00001" value="0.00001">
+                        </div>
+                        <div class="form-group">
+                            <label>Start Wallet Index</label>
+                            <input type="number" id="autoStartIndex" placeholder="0" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>End Wallet Index</label>
+                            <input type="number" id="autoEndIndex" placeholder="100" value="100">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="button-grid">
+                    <button class="btn btn-success" onclick="startCreateAndSwap()">
+                        🆕 Create & V2 Multi-Swap Loop
+                    </button>
+                    <button class="btn btn-success" onclick="startCreateAndSwapV3()">
+                        🆕 Create & V3 Swap Loop
+                    </button>
+                    <button class="btn btn-success" onclick="startCreateAndMultiSwapV3()">
+                        🆕 Create & V3 Multi-Swap Loop
+                    </button>
+                    <button class="btn btn-danger" onclick="stopAutomation()">
+                        🛑 Stop All Automation
+                    </button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>🔥 Volume Generation</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Contract Address</label>
+                        <input type="text" id="contractAddress" placeholder="0x...">
+                    </div>
+                    <div class="form-group">
+                        <label>Volume Token</label>
+                        <input type="text" id="volumeToken" placeholder="0x...">
+                    </div>
+                    <div class="form-group">
+                        <label>TX Delay (ms)</label>
+                        <input type="number" id="volumeTxDelay" placeholder="150" value="150">
+                    </div>
+                    <div class="form-group">
+                        <label>Cycle Delay (ms)</label>
+                        <input type="number" id="volumeCycleDelay" placeholder="3000" value="3000">
+                    </div>
+                </div>
+                <div class="button-grid">
+                    <button class="btn btn-primary" onclick="startVolumeV2()">
+                        📈 Start V2 Volume Bot
+                    </button>
+                    <button class="btn btn-secondary" onclick="startVolumeV3()">
+                        📈 Start V3 Volume Bot
+                    </button>
+                    <button class="btn btn-secondary" onclick="startVolumeV3Fresh()">
+                        🆕 Start V3 Fresh Volume Bot
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Tab -->
+        <div id="monitoring" class="tab-content">
+            <div class="section">
+                <h3>📊 Real-time Monitoring</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="successfulOps">0</div>
+                        <div class="stat-label">Successful Operations</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="failedOps">0</div>
+                        <div class="stat-label">Failed Operations</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalGasUsed">0.000</div>
+                        <div class="stat-label">Total Gas Used (ETH)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="successRate">0%</div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                </div>
+
+                <div class="progress-bar">
+                    <div class="progress-fill" id="operationProgress"></div>
+                </div>
+
+                <div class="button-grid">
+                    <button class="btn btn-secondary" onclick="refreshStats()">
+                        🔄 Refresh Stats
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportLogs()">
+                        📥 Export Logs
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearTerminal()">
+                        🗑️ Clear Terminal
+                    </button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>📋 Command History</h3>
+                <div class="command-history" id="commandHistory">
+                    <div class="history-item">No commands executed yet</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal Output -->
+        <div class="terminal" id="terminal">
+            <div class="log-entry log-info">TurboBot Web Controller v1.0 - Ready</div>
+            <div class="log-entry">Type commands above or use the GUI controls</div>
+            <div class="log-entry">─────────────────────────────────────────────</div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <script>
+// Global state management
+let automationProcesses = new Set();
+let commandHistory = [];
+let wsConnection = null;
+let activeCommands = new Set(); // Track active commands for loading states
+let stats = {
+    successfulOps: 0,
+    failedOps: 0,
+    totalGasUsed: 0,
+    totalWallets: 0,
+    fundedWallets: 0,
+    totalBalance: 0
+};
+
+// WebSocket connection management
+function initializeWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    
+    try {
+        wsConnection = new WebSocket(wsUrl);
+        
+        wsConnection.onopen = function(event) {
+            logToTerminal('🔗 Real-time connection established', 'success');
+            updateConnectionStatus(true);
+        };
+        
+        wsConnection.onmessage = function(event) {
+            try {
+                const message = JSON.parse(event.data);
+                handleWebSocketMessage(message);
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+        
+        wsConnection.onclose = function(event) {
+            logToTerminal('❌ Real-time connection lost', 'error');
+            updateConnectionStatus(false);
+            
+            // Attempt to reconnect after 3 seconds
+            setTimeout(() => {
+                logToTerminal('🔄 Attempting to reconnect...', 'info');
+                initializeWebSocket();
+            }, 3000);
+        };
+        
+        wsConnection.onerror = function(error) {
+            logToTerminal('⚠️ Connection error occurred', 'warning');
+            updateConnectionStatus(false);
+        };
+        
+    } catch (error) {
+        logToTerminal('❌ Failed to establish WebSocket connection', 'error');
+        updateConnectionStatus(false);
+    }
+}
+
+// Handle WebSocket messages
+function handleWebSocketMessage(message) {
+    switch (message.type) {
+        case 'connection':
+            logToTerminal('✅ Connected to TurboBot backend', 'success');
+            break;
+            
+        case 'output':
+            // Display real-time command output
+            const cleanOutput = message.data.replace(/\n$/, ''); // Remove trailing newline
+            if (cleanOutput.trim()) {
+                logToTerminal(cleanOutput, 'info');
+                
+                // Parse output for statistics updates
+                parseOutputForStats(cleanOutput);
+            }
+            break;
+            
+        case 'error':
+            logToTerminal(message.data, 'error');
+            break;
+            
+        case 'complete':
+            // Remove the command from active commands and hide loading
+            if (message.processId) {
+                activeCommands.delete(message.processId);
+                setButtonLoadingState(null, false); // Reset all buttons
+            }
+            
+            if (message.success) {
+                logToTerminal(`✅ Command completed: ${message.command}`, 'success');
+                stats.successfulOps++;
+            } else {
+                logToTerminal(`❌ Command failed: ${message.command} (exit code: ${message.exitCode})`, 'error');
+                stats.failedOps++;
+            }
+            updateStats();
+            break;
+            
+        case 'process_error':
+            // Remove from active commands and reset button states
+            activeCommands.clear();
+            setButtonLoadingState(null, false);
+            
+            logToTerminal(`💥 Process error: ${message.error}`, 'error');
+            stats.failedOps++;
+            updateStats();
+            break;
+            
+        case 'stopped':
+            logToTerminal(`🛑 Process stopped: ${message.command}`, 'warning');
+            activeCommands.delete(message.processId);
+            setButtonLoadingState(null, false);
+            break;
+            
+        case 'all_stopped':
+            logToTerminal(`🛑 All processes stopped (${message.stoppedProcesses?.length || 0} processes)`, 'warning');
+            automationProcesses.clear();
+            activeCommands.clear();
+            setButtonLoadingState(null, false);
+            updateStats();
+            break;
+            
+        case 'long_running':
+            logToTerminal(`⏳ ${message.message}`, 'info');
+            break;
+            
+        default:
+            console.log('Unknown WebSocket message type:', message.type);
+    }
+}
+
+// Enhanced button loading state management
+function setButtonLoadingState(buttonElement, isLoading) {
+    if (buttonElement) {
+        if (isLoading) {
+            buttonElement.classList.add('loading');
+            buttonElement.disabled = true;
+        } else {
+            buttonElement.classList.remove('loading');
+            buttonElement.disabled = false;
+        }
+    } else {
+        // Reset all buttons if no specific button provided
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.classList.remove('loading');
+            btn.disabled = false;
+        });
+    }
+}
+
+// Enhanced command execution with proper loading management
+async function executeCommand(command, args = [], buttonElement = null) {
+    const fullCommand = `${command} ${args.join(' ')}`.trim();
+    
+    // Client-side validation
+    const validationResult = validateCommandClient(command, args);
+    if (!validationResult.valid) {
+        logToTerminal(`❌ Validation failed: ${validationResult.errors.join(', ')}`, 'error');
+        return;
+    }
+    
+    console.log(`🚀 Executing: ${fullCommand}`, 'info');
+    logToTerminal(`🚀 Executing: ${fullCommand}`, 'info');
+    addToHistory(fullCommand);
+    
+    // Set loading state for the clicked button
+    if (buttonElement) {
+        setButtonLoadingState(buttonElement, true);
+    }
+    
+    try {
+        const response = await fetch('/api/execute', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                command: command,
+                args: args
+            })
+        });
+        
+        const result = await response.json();
+
+        console.log(result);
+        
+        // Track the process for loading management
+        if (result.processId) {
+            activeCommands.add(result.processId);
+        }
+        
+        if (!result.success) {
+            logToTerminal(`❌ Command failed: ${result.error}`, 'error');
+            if (result.validationErrors) {
+                result.validationErrors.forEach(error => {
+                    logToTerminal(`   • ${error}`, 'warning');
+                });
+            }
+            stats.failedOps++;
+            updateStats();
+            
+            // Reset button state on immediate failure
+            if (buttonElement) {
+                setButtonLoadingState(buttonElement, false);
+            }
+        }
+        
+        // For continuous commands, add to automation tracking
+        if (['volumeV2', 'volumeV3', 'volumeV3Fresh', 'create-and-swap', 'create-and-swapv3', 'create-and-multiswapv3'].includes(command)) {
+            automationProcesses.add(result.processId || command);
+            logToTerminal(`📊 Added to automation tracking: ${command}`, 'info');
+        }
+        
+    } catch (error) {
+        logToTerminal(`🌐 Network error: ${error.message}`, 'error');
+        stats.failedOps++;
+        updateStats();
+        
+        // Reset button state on network error
+        if (buttonElement) {
+            setButtonLoadingState(buttonElement, false);
+        }
+    }
+}
+
+// Client-side command validation
+function validateCommandClient(command, args) {
+    const errors = [];
+    
+    // Check for common validation issues
+    switch (command) {
+        case 'volumeV2':
+        case 'volumeV3':
+            // Check token address format
+            if (args[2] && !isValidEthereumAddress(args[2])) {
+                errors.push('Token address must be a valid Ethereum address (0x followed by 40 hex characters)');
+            }
+            
+            // Check numeric parameters
+            if (args[3] && (isNaN(args[3]) || parseInt(args[3]) < 50)) {
+                errors.push('TX delay must be at least 50 milliseconds');
+            }
+            break;
+            
+        case 'create':
+            if (args[0] && (isNaN(args[0]) || parseInt(args[0]) < 1 || parseInt(args[0]) > 50000)) {
+                errors.push('Wallet count must be between 1 and 50,000');
+            }
+            break;
+            
+        case 'deploy':
+        case 'withdraw-token':
+            if (!args[0]) {
+                errors.push('Token address is required');
+            } else if (!isValidEthereumAddress(args[0])) {
+                errors.push('Invalid token address format');
+            }
+            break;
+    }
+    
+    return {
+        valid: errors.length === 0,
+        errors: errors
+    };
+}
+
+// Validate Ethereum address format
+function isValidEthereumAddress(address) {
+    return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+// Enhanced volume generation functions with button loading
+async function startVolumeV2() {
+    const start = document.getElementById('autoStartIndex').value || '0';
+    const end = document.getElementById('autoEndIndex').value || '100';
+    const token = document.getElementById('volumeToken').value;
+    const txDelay = document.getElementById('volumeTxDelay').value || '150';
+    const cycleDelay = document.getElementById('volumeCycleDelay').value || '3000';
+    
+    // Validate token address if provided
+    if (token && !isValidEthereumAddress(token)) {
+        logToTerminal('❌ Invalid token address format. Please use format: 0x...', 'error');
+        return;
+    }
+    
+    if (!token) {
+        logToTerminal('⚠️ No token address specified. Will use default V2 token.', 'warning');
+    }
+    
+    const args = [start, end];
+    if (token) args.push(token);
+    args.push(txDelay, cycleDelay, '1000');
+    
+    logToTerminal('🔥 Starting V2 volume generation...', 'warning');
+    logToTerminal(`📊 Configuration: Wallets ${start}-${end}, Token: ${token || 'Default'}, TX Delay: ${txDelay}ms`, 'info');
+    await executeCommand('volumeV2', args, event.target);
+}
+
+async function startVolumeV3() {
+    const start = document.getElementById('autoStartIndex').value || '0';
+    const end = document.getElementById('autoEndIndex').value || '100';
+    const token = document.getElementById('volumeToken').value;
+    const txDelay = document.getElementById('volumeTxDelay').value || '150';
+    const cycleDelay = document.getElementById('volumeCycleDelay').value || '3000';
+    
+    // Validate token address if provided
+    if (token && !isValidEthereumAddress(token)) {
+        logToTerminal('❌ Invalid token address format. Please use format: 0x...', 'error');
+        return;
+    }
+    
+    if (!token) {
+        logToTerminal('⚠️ No token address specified. Will use default V3 token.', 'warning');
+    }
+    
+    const args = [start, end];
+    if (token) args.push(token);
+    args.push(txDelay, cycleDelay, '1000');
+    
+    logToTerminal('⚡ Starting V3 volume generation...', 'warning');
+    logToTerminal(`📊 Configuration: Wallets ${start}-${end}, Token: ${token || 'Default'}, TX Delay: ${txDelay}ms`, 'info');
+    await executeCommand('volumeV3', args, event.target);
+}
+
+async function startVolumeV3Fresh() {
+    const token = document.getElementById('volumeToken').value;
+    const txDelay = document.getElementById('volumeTxDelay').value || '2000';
+    const cycleDelay = document.getElementById('volumeCycleDelay').value || '5000';
+    const funding = document.getElementById('fundingAmount').value || '0.00001';
+    
+    // Validate token address if provided
+    if (token && !isValidEthereumAddress(token)) {
+        logToTerminal('❌ Invalid token address format. Please use format: 0x...', 'error');
+        return;
+    }
+    
+    if (!token) {
+        logToTerminal('⚠️ No token address specified. Will use default V3 token.', 'warning');
+    }
+    
+    const args = [];
+    if (token) args.push(token);
+    args.push(txDelay, cycleDelay, funding);
+    
+    logToTerminal('🆕 Starting V3 fresh wallet volume generation...', 'warning');
+    logToTerminal(`📊 Configuration: Token: ${token || 'Default'}, Cycle Delay: ${cycleDelay}ms, Funding: ${funding} ETH`, 'info');
+    await executeCommand('volumeV3Fresh', args, event.target);
+}
+
+// Enhanced stop automation with backend communication
+async function stopAutomation() {
+    const buttonElement = event.target;
+    
+    if (automationProcesses.size === 0) {
+        logToTerminal('ℹ️ No automation processes running', 'info');
+        return;
+    }
+    
+    logToTerminal(`🛑 Stopping ${automationProcesses.size} automation process(es)...`, 'warning');
+    setButtonLoadingState(buttonElement, true);
+    
+    try {
+        const response = await fetch('/api/stop-all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            logToTerminal(`✅ ${result.message}`, 'success');
+            automationProcesses.clear();
+            activeCommands.clear();
+            document.getElementById('activeOps').textContent = '0';
+        } else {
+            logToTerminal(`❌ Failed to stop processes: ${result.error}`, 'error');
+        }
+        
+    } catch (error) {
+        logToTerminal(`🌐 Error stopping processes: ${error.message}`, 'error');
+    } finally {
+        setButtonLoadingState(buttonElement, false);
+    }
+}
+
+// Initialize the application
+function initializeApp() {
+    logToTerminal('🚀 TurboBot Web Controller v2.0 initialized', 'success');
+    logToTerminal('🔄 Establishing real-time connection...', 'info');
+    
+    // Initialize WebSocket connection
+    initializeWebSocket();
+    
+    // Setup token validation
+    setupTokenValidation();
+    
+    // Check system status
+    checkSystemStatus();
+    
+    // Start real-time updates
+    setInterval(simulateRealtimeUpdates, 2000);
+    
+    // Load any saved configuration
+    loadConfiguration();
+    
+    // Check for system requirements
+    setTimeout(checkSystemRequirements, 1000);
+}
+
+function checkSystemRequirements() {
+    logToTerminal('🔍 Checking system requirements...', 'info');
+    
+    // Check for Node.js script
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(status => {
+            if (status.scriptExists && status.envExists) {
+                logToTerminal('✅ System requirements met', 'success');
+                logToTerminal('📋 Ready to execute commands', 'info');
+            } else {
+                if (!status.scriptExists) {
+                    logToTerminal('❌ script.js not found', 'error');
+                }
+                if (!status.envExists) {
+                    logToTerminal('❌ .env configuration not found', 'error');
+                }
+                logToTerminal('⚠️ Please run setup first', 'warning');
+            }
+        })
+        .catch(error => {
+            logToTerminal('❌ Could not check system status', 'error');
+        });
+}
+
+function loadConfiguration() {
+    // Load configuration from localStorage if available
+    const savedConfig = localStorage.getItem('turbobotConfig');
+    if (savedConfig) {
+        try {
+            const config = JSON.parse(savedConfig);
+            if (config.rpcUrl) document.getElementById('rpcUrl').value = config.rpcUrl;
+            if (config.gasMax) document.getElementById('gasMax').value = config.gasMax;
+            if (config.walletCount) document.getElementById('walletCount').value = config.walletCount;
+            if (config.chunkSize) document.getElementById('chunkSize').value = config.chunkSize;
+            logToTerminal('📁 Configuration loaded from browser storage', 'info');
+        } catch (e) {
+            logToTerminal('⚠️ Failed to load saved configuration', 'warning');
+        }
+    }else{
+        document.getElementById('gasMax').value = "0.0001";
+    }
+}
+
+function saveConfiguration() {
+    const config = {
+        rpcUrl: document.getElementById('rpcUrl').value,
+        gasMax: document.getElementById('gasMax').value,
+        walletCount: document.getElementById('walletCount').value,
+        chunkSize: document.getElementById('chunkSize').value
+    };
+    localStorage.setItem('turbobotConfig', JSON.stringify(config));
+}
+
+// Enhanced updateConfig function
+function updateConfig() {
+    const config = {
+        rpcUrl: document.getElementById('rpcUrl').value,
+        gasMax: document.getElementById('gasMax').value,
+        walletCount: document.getElementById('walletCount').value,
+        chunkSize: document.getElementById('chunkSize').value
+    };
+    
+    saveConfiguration();
+    logToTerminal('💾 Configuration updated and saved', 'success');
+    logToTerminal(`🌐 RPC URL: ${config.rpcUrl || 'Not set'}`, 'info');
+    logToTerminal(`⛽ Gas Max: ${config.gasMax || 'Default'} ETH`, 'info');
+    logToTerminal(`👛 Wallet Count: ${config.walletCount || 'Default'}`, 'info');
+    logToTerminal(`📦 Chunk Size: ${config.chunkSize || 'Default'}`, 'info');
+}
+
+// Enhanced token address input with validation
+function setupTokenValidation() {
+    const tokenInputs = ['singleToken', 'volumeToken'];
+    
+    tokenInputs.forEach(inputId => {
+        const input = document.getElementById(inputId);
+        if (input) {
+            input.addEventListener('blur', function() {
+                const value = this.value.trim();
+                if (value && !isValidEthereumAddress(value)) {
+                    this.style.borderColor = '#ef4444';
+                    this.title = 'Invalid Ethereum address format. Should be 0x followed by 40 hex characters.';
+                } else {
+                    this.style.borderColor = '#e5e7eb';
+                    this.title = '';
+                }
+            });
+        }
+    });
+}
+
+// Enhanced multi-token validation
+function validateMultiTokens(tokensString) {
+    if (!tokensString.trim()) return { valid: true, tokens: [] };
+    
+    const tokens = tokensString.split(',').map(t => t.trim()).filter(t => t);
+    const invalidTokens = tokens.filter(token => !isValidEthereumAddress(token));
+    
+    return {
+        valid: invalidTokens.length === 0,
+        tokens: tokens,
+        invalidTokens: invalidTokens
+    };
+}
+
+// Parse server output for statistics updates
+function parseOutputForStats(output) {
+    try {
+        // Parse wallet count from various command outputs
+        let walletMatch = output.match(/(?:Created|Total|Found|Generated)\s+(\d+)\s+wallets?/i);
+        if (walletMatch) {
+            const walletCount = parseInt(walletMatch[1]);
+            if (walletCount > stats.totalWallets) {
+                stats.totalWallets = walletCount;
+                updateStats();
+                logToTerminal(`📊 Updated wallet count: ${walletCount}`, 'success');
+            }
+        }
+        
+        // Parse wallet count from "X wallets loaded" messages
+        walletMatch = output.match(/(\d+)\s+wallets?\s+loaded/i);
+        if (walletMatch) {
+            const walletCount = parseInt(walletMatch[1]);
+            stats.totalWallets = walletCount;
+            updateStats();
+            logToTerminal(`📊 Loaded wallet count: ${walletCount}`, 'success');
+        }
+        
+        // Parse funded wallets from balance checks
+        let fundedMatch = output.match(/(\d+)\s+(?:funded|active)\s+wallets?/i);
+        if (fundedMatch) {
+            const fundedCount = parseInt(fundedMatch[1]);
+            stats.fundedWallets = fundedCount;
+            document.getElementById('fundedWallets').textContent = fundedCount;
+        }
+        
+        // Parse total balance from wallet checks
+        let balanceMatch = output.match(/Total\s+balance:\s*([\d.]+)\s*ETH/i);
+        if (balanceMatch) {
+            const totalBalance = parseFloat(balanceMatch[1]);
+            stats.totalBalance = totalBalance;
+            document.getElementById('totalBalance').textContent = totalBalance.toFixed(6);
+        }
+        
+        // Parse average balance
+        balanceMatch = output.match(/Average\s+balance:\s*([\d.]+)\s*ETH/i);
+        if (balanceMatch) {
+            const avgBalance = parseFloat(balanceMatch[1]);
+            document.getElementById('avgBalance').textContent = avgBalance.toFixed(6);
+        }
+        
+        // Parse gas usage from transaction outputs
+        let gasMatch = output.match(/Gas\s+used:\s*([\d.]+)\s*ETH/i);
+        if (gasMatch) {
+            const gasUsed = parseFloat(gasMatch[1]);
+            stats.totalGasUsed += gasUsed;
+            updateStats();
+        }
+        
+        // Parse successful transactions
+        if (output.match(/✅|✓|SUCCESS|successful/i) && output.match(/transaction|tx|swap/i)) {
+            stats.successfulOps++;
+            updateStats();
+        }
+        
+        // Parse failed transactions
+        if (output.match(/❌|✗|FAILED|ERROR|failed/i) && output.match(/transaction|tx|swap/i)) {
+            stats.failedOps++;
+            updateStats();
+        }
+        
+        // Parse wallet creation completion
+        let createdMatch = output.match(/Successfully\s+created\s+(\d+)\s+wallets?/i);
+        if (createdMatch) {
+            const newWallets = parseInt(createdMatch[1]);
+            stats.totalWallets += newWallets;
+            updateStats();
+            logToTerminal(`📊 Added ${newWallets} new wallets`, 'success');
+        }
+        
+        // Parse setup completion with wallet count
+        let setupMatch = output.match(/Setup\s+complete.*?(\d+)\s+wallets?/i);
+        if (setupMatch) {
+            const walletCount = parseInt(setupMatch[1]);
+            stats.totalWallets = walletCount;
+            updateStats();
+        }
+        
+    } catch (error) {
+        console.log('Error parsing output for stats:', error);
+    }
+}
+
+// Enhanced stats update with additional fields
+function updateStats() {
+    document.getElementById('totalWallets').textContent = stats.totalWallets;
+    document.getElementById('successfulOps').textContent = stats.successfulOps;
+    document.getElementById('failedOps').textContent = stats.failedOps;
+    document.getElementById('totalGasUsed').textContent = stats.totalGasUsed.toFixed(6);
+    
+    const total = stats.successfulOps + stats.failedOps;
+    const rate = total > 0 ? ((stats.successfulOps / total) * 100).toFixed(1) : 0;
+    document.getElementById('successRate').textContent = `${rate}%`;
+    
+    // Update additional stats if they exist
+    if (stats.fundedWallets !== undefined) {
+        const fundedElement = document.getElementById('fundedWallets');
+        if (fundedElement) fundedElement.textContent = stats.fundedWallets;
+    }
+    
+    if (stats.totalBalance !== undefined) {
+        const balanceElement = document.getElementById('totalBalance');
+        if (balanceElement) balanceElement.textContent = stats.totalBalance.toFixed(6);
+    }
+}
+
+// Enhanced system status check with wallet count
+async function checkSystemStatus() {
+    try {
+        const response = await fetch('/api/status');
+        const status = await response.json();
+        
+        // Update UI based on system status
+        if (!status.scriptExists) {
+            logToTerminal('⚠️ script.js not found. Please run setup first.', 'warning');
+        }
+        
+        if (!status.envExists) {
+            logToTerminal('⚠️ .env file not found. Please run setup first.', 'warning');
+        }
+        
+        document.getElementById('activeOps').textContent = status.activeProcesses;
+        
+        // Try to get wallet count from a check command
+        // if (status.scriptExists && status.envExists) {
+        //     setTimeout(() => {
+        //         executeCommand('check', [], null); // Don't show loading for background check
+        //     }, 2000);
+        // }
+        
+    } catch (error) {
+        console.error('Error checking system status:', error);
+    }
+}
+
+// Tab switching functionality
+function switchTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Remove active class from all tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab content
+    document.getElementById(tabName).classList.add('active');
+    
+    // Add active class to clicked tab
+    event.target.classList.add('active');
+}
+
+// Terminal logging functions
+function logToTerminal(message, type = 'info') {
+    const terminal = document.getElementById('terminal');
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry log-${type}`;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    logEntry.innerHTML = `[${timestamp}] ${message}`;
+    
+    terminal.appendChild(logEntry);
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function clearTerminal() {
+    const terminal = document.getElementById('terminal');
+    terminal.innerHTML = `
+        <div class="log-entry log-info">Terminal cleared - TurboBot Web Controller v2.0</div>
+        <div class="log-entry">Ready for new commands</div>
+        <div class="log-entry">─────────────────────────────────────────────</div>
+    `;
+}
+
+// Update connection status
+function updateConnectionStatus(connected = false) {
+    const statusDot = document.getElementById('connectionStatus');
+    const statusText = document.getElementById('connectionText');
+    
+    if (connected) {
+        statusDot.classList.add('connected');
+        statusText.textContent = 'Connected';
+    } else {
+        statusDot.classList.remove('connected');
+        statusText.textContent = 'Disconnected';
+    }
+}
+
+// Add command to history
+function addToHistory(command) {
+    commandHistory.unshift(command);
+    if (commandHistory.length > 50) {
+        commandHistory.pop();
+    }
+    updateCommandHistory();
+}
+
+function updateCommandHistory() {
+    const historyContainer = document.getElementById('commandHistory');
+    historyContainer.innerHTML = '';
+    
+    if (commandHistory.length === 0) {
+        historyContainer.innerHTML = '<div class="history-item">No commands executed yet</div>';
+        return;
+    }
+    
+    commandHistory.forEach(cmd => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.textContent = cmd;
+        item.onclick = () => {
+            logToTerminal(`Repeating command: ${cmd}`, 'info');
+            executeCommand(cmd);
+        };
+        historyContainer.appendChild(item);
+    });
+}
+
+// Update statistics
+function updateStats() {
+    document.getElementById('totalWallets').textContent = stats.totalWallets;
+    document.getElementById('successfulOps').textContent = stats.successfulOps;
+    document.getElementById('failedOps').textContent = stats.failedOps;
+    document.getElementById('totalGasUsed').textContent = stats.totalGasUsed.toFixed(6);
+    
+    const total = stats.successfulOps + stats.failedOps;
+    const rate = total > 0 ? ((stats.successfulOps / total) * 100).toFixed(1) : 0;
+    document.getElementById('successRate').textContent = `${rate}%`;
+}
+
+// Setup functions with button loading
+async function runSetup() {
+    await executeCommand('setup', [], event.target);
+}
+
+// Wallet management functions with button loading
+async function createWallets() {
+    const count = document.getElementById('createCount').value || '100';
+    await executeCommand('create', [count], event.target);
+}
+
+async function targetWallets() {
+    const target = document.getElementById('targetCount').value;
+    if (!target) {
+        logToTerminal('Please enter target wallet count', 'warning');
+        return;
+    }
+    await executeCommand('target', [target], event.target);
+}
+
+async function checkWallets() {
+    await executeCommand('check', [], event.target);
+}
+
+async function startAirdrop() {
+    const chunk = document.getElementById('airdropChunk').value || '500';
+    const total = document.getElementById('airdropTotal').value;
+    const delay = document.getElementById('airdropDelay').value || '3000';
+    
+    const args = [chunk];
+    if (total) args.push(total);
+    args.push(delay);
+    
+    await executeCommand('airdrop-batch', args, event.target);
+}
+
+// Trading functions with button loading
+async function startSwapBatch() {
+    const batchSize = document.getElementById('tradeBatchSize').value || '50';
+    const token = document.getElementById('singleToken').value;
+    const delay = document.getElementById('tradeBatchDelay').value || '1000';
+    
+    const args = [batchSize];
+    if (token) args.push(token);
+    args.push(delay);
+    
+    await executeCommand('swap-batch', args, event.target);
+}
+
+async function startMultiSwapBatch() {
+    const batchSize = document.getElementById('tradeBatchSize').value || '50';
+    const tokens = document.getElementById('multiTokens').value;
+    const delay = document.getElementById('tradeBatchDelay').value || '2000';
+    
+    if (tokens) {
+        const validation = validateMultiTokens(tokens);
+        if (!validation.valid) {
+            logToTerminal(`❌ Invalid token addresses: ${validation.invalidTokens.join(', ')}`, 'error');
+            return;
+        }
+        logToTerminal(`📊 Validated ${validation.tokens.length} token addresses`, 'success');
+    }
+    
+    const args = [batchSize];
+    if (tokens) args.push(tokens);
+    args.push(delay);
+    
+    await executeCommand('multiswap-batch', args, event.target);
+}
+
+async function startV3SwapBatch() {
+    const batchSize = document.getElementById('tradeBatchSize').value || '50';
+    const token = document.getElementById('singleToken').value;
+    const start = document.getElementById('startIndex').value || '0';
+    const end = document.getElementById('endIndex').value || '100';
+    const delay = document.getElementById('tradeBatchDelay').value || '2000';
+    
+    await executeCommand('swapv3-batch', [batchSize, token, start, end, delay], event.target);
+}
+
+// Individual operation functions with button loading
+async function individualSwap() {
+    const start = document.getElementById('startIndex').value || '0';
+    const end = document.getElementById('endIndex').value || '100';
+    const token = document.getElementById('singleToken').value;
+    
+    const args = [start, end];
+    if (token) args.push(token);
+    
+    await executeCommand('swap', args, event.target);
+}
+
+async function individualMultiSwap() {
+    const start = document.getElementById('startIndex').value || '0';
+    const end = document.getElementById('endIndex').value || '100';
+    const tokens = document.getElementById('multiTokens').value;
+    
+    const args = [start, end];
+    if (tokens) args.push(tokens);
+    
+    await executeCommand('multiswap', args, event.target);
+}
+
+async function individualV3Swap() {
+    const start = document.getElementById('startIndex').value || '0';
+    const end = document.getElementById('endIndex').value || '100';
+    const token = document.getElementById('singleToken').value;
+    
+    const args = [start, end];
+    if (token) args.push(token);
+    
+    await executeCommand('swapv3', args, event.target);
+}
+
+async function individualV3MultiSwap() {
+    const start = document.getElementById('startIndex').value || '0';
+    const end = document.getElementById('endIndex').value || '100';
+    const tokens = document.getElementById('multiTokens').value;
+    
+    const args = [start, end];
+    if (tokens) args.push(tokens);
+    
+    await executeCommand('multiswapV3', args, event.target);
+}
+
+// Automation functions with button loading
+async function startCreateAndSwap() {
+    const tokens = document.getElementById('multiTokens').value;
+    const cycleDelay = document.getElementById('cycleDelay').value || '2000';
+    const fundingAmount = document.getElementById('fundingAmount').value || '0.00001';
+    
+    const args = [];
+    if (tokens) args.push(tokens);
+    args.push(cycleDelay, fundingAmount);
+    
+    logToTerminal('Starting continuous create & swap automation...', 'warning');
+    automationProcesses.add('create-and-swap');
+    await executeCommand('create-and-swap', args, event.target);
+}
+
+async function startCreateAndSwapV3() {
+    const tokens = document.getElementById('multiTokens').value;
+    const cycleDelay = document.getElementById('cycleDelay').value || '3000';
+    const fundingAmount = document.getElementById('fundingAmount').value || '0.000005';
+    
+    const args = [];
+    if (tokens) args.push(tokens);
+    args.push(cycleDelay, fundingAmount);
+    
+    logToTerminal('Starting continuous V3 create & swap automation...', 'warning');
+    automationProcesses.add('create-and-swapv3');
+    await executeCommand('create-and-swapv3', args, event.target);
+}
+
+async function startCreateAndMultiSwapV3() {
+    const tokens = document.getElementById('multiTokens').value;
+    const cycleDelay = document.getElementById('cycleDelay').value || '3000';
+    const fundingAmount = document.getElementById('fundingAmount').value || '0.000005';
+    
+    const args = [];
+    if (tokens) args.push(tokens);
+    args.push(cycleDelay, fundingAmount);
+    
+    logToTerminal('Starting continuous V3 multi-swap automation...', 'warning');
+    automationProcesses.add('create-and-multiswapv3');
+    await executeCommand('create-and-multiswapv3', args, event.target);
+}
+
+// Monitoring functions
+function refreshStats() {
+    logToTerminal('🔄 Refreshing statistics...', 'info');
+    
+    // Execute a background wallet check to get current stats
+    executeCommand('check', [], null);
+    
+    // Also fetch system status
+    checkSystemStatus();
+    
+    logToTerminal('✅ Statistics refresh initiated', 'success');
+}
+
+function exportLogs() {
+    const terminal = document.getElementById('terminal');
+    const logs = Array.from(terminal.children).map(entry => entry.textContent).join('\n');
+    
+    const blob = new Blob([logs], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `turbobot-logs-${new Date().toISOString().slice(0, 19)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    logToTerminal('Logs exported successfully', 'success');
+}
+
+// Simulate real-time updates
+function simulateRealtimeUpdates() {
+    // Update gas price
+    const gasPrice = (Math.random() * 2 + 0.5).toFixed(3);
+    document.getElementById('gasPrice').textContent = `${gasPrice} Gwei`;
+    
+    // Update ETH price
+    const ethPrice = (Math.random() * 100 + 3500).toFixed(0);
+    document.getElementById('ethPrice').textContent = `${ethPrice}`;
+    
+    // Update active operations
+    document.getElementById('activeOps').textContent = automationProcesses.size;
+    
+    // Simulate some progress
+    const progress = Math.min((stats.successfulOps + stats.failedOps) % 100, 95);
+    document.getElementById('operationProgress').style.width = `${progress}%`;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl+Shift+C: Clear terminal
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') {
+        e.preventDefault();
+        clearTerminal();
+    }
+    
+    // Ctrl+Shift+S: Stop automation
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyS') {
+        e.preventDefault();
+        stopAutomation();
+    }
+    
+    // Ctrl+Shift+R: Refresh stats
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyR') {
+        e.preventDefault();
+        refreshStats();
+    }
+    
+    // Ctrl+Shift+H: Show help
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyH') {
+        e.preventDefault();
+        showKeyboardShortcuts();
+    }
+});
+
+function showKeyboardShortcuts() {
+    logToTerminal('⌨️ Keyboard Shortcuts:', 'info');
+    logToTerminal('   Ctrl+Shift+C: Clear terminal', 'info');
+    logToTerminal('   Ctrl+Shift+S: Stop all automation', 'info');
+    logToTerminal('   Ctrl+Shift+R: Refresh statistics', 'info');
+    logToTerminal('   Ctrl+Shift+H: Show this help', 'info');
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initializeApp);
+
+// Auto-save configuration on input changes
+document.addEventListener('input', function(e) {
+    if (e.target.matches('#rpcUrl, #gasMax, #walletCount, #chunkSize')) {
+        clearTimeout(window.configSaveTimeout);
+        window.configSaveTimeout = setTimeout(saveConfiguration, 1000);
+    }
+});
+
+// Page visibility handling - pause updates when tab is not visible
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        logToTerminal('⏸️ Tab hidden - reducing update frequency', 'info');
+    } else {
+        logToTerminal('▶️ Tab visible - resuming normal updates', 'info');
+        // Refresh stats when tab becomes visible again
+        setTimeout(refreshStats, 500);
+    }
+});
+
+// Handle page unload - attempt to stop automation
+window.addEventListener('beforeunload', function(e) {
+    if (automationProcesses.size > 0) {
+        // Try to stop automation (may not complete due to page unload)
+        fetch('/api/stop-all', { 
+            method: 'POST',
+            keepalive: true 
+        }).catch(err => console.log('Could not stop automation on page unload'));
+        
+        // Show confirmation dialog
+        e.preventDefault();
+        e.returnValue = 'You have running automation processes. Are you sure you want to leave?';
+        return e.returnValue;
+    }
+});
+
+// Connection retry logic
+function attemptReconnect() {
+    if (!wsConnection || wsConnection.readyState === WebSocket.CLOSED) {
+        logToTerminal('🔄 Attempting to reconnect...', 'info');
+        initializeWebSocket();
+    }
+}
+
+// Periodic connection check
+setInterval(() => {
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        // Send ping to keep connection alive
+        try {
+            wsConnection.send(JSON.stringify({ type: 'ping' }));
+        } catch (error) {
+            console.log('Ping failed, connection may be closed');
+            attemptReconnect();
+        }
+    } else {
+        attemptReconnect();
+    }
+}, 30000); // Check every 30 seconds
+
+// Network status monitoring
+window.addEventListener('online', function() {
+    logToTerminal('🌐 Network connection restored', 'success');
+    attemptReconnect();
+});
+
+window.addEventListener('offline', function() {
+    logToTerminal('📡 Network connection lost', 'warning');
+    updateConnectionStatus(false);
+});
+
+// Enhanced error handling for fetch requests
+async function safeFetch(url, options = {}) {
+    try {
+        const response = await fetch(url, {
+            ...options,
+            timeout: 30000 // 30 second timeout
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response;
+    } catch (error) {
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            throw new Error('Network connection failed - check if the server is running');
+        }
+        throw error;
+    }
+}
+
+// Helper function to format large numbers
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    }
+    if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+
+// Helper function to format time duration
+function formatDuration(ms) {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes % 60}m`;
+    }
+    if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`;
+    }
+    return `${seconds}s`;
+}
+
+// Add performance monitoring
+let performanceMetrics = {
+    commandsExecuted: 0,
+    averageResponseTime: 0,
+    totalResponseTime: 0
+};
+
+function trackPerformance(startTime, command) {
+    const responseTime = Date.now() - startTime;
+    performanceMetrics.commandsExecuted++;
+    performanceMetrics.totalResponseTime += responseTime;
+    performanceMetrics.averageResponseTime = performanceMetrics.totalResponseTime / performanceMetrics.commandsExecuted;
+    
+    if (responseTime > 5000) { // Log slow commands
+        logToTerminal(`⏱️ Slow response: ${command} took ${formatDuration(responseTime)}`, 'warning');
+    }
+}
+    </script>
+</body>
+</html>
