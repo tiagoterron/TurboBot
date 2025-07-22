@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const WebSocket = require('ws');
 const path = require('path');
 const fs = require('fs');
+const { ethers } = require('ethers');
 
 const app = express();
 const server = require('http').createServer(app);
@@ -12,9 +13,19 @@ const wss = new WebSocket.Server({ server });
 app.use(express.json());
 app.use(express.static('public')); // Serve the HTML file
 
+// Load environment variables for RPC connection
+require('dotenv').config();
+
 // Store active processes and WebSocket connections
 const activeProcesses = new Map();
 const wsConnections = new Set();
+
+// Gas price cache to avoid excessive API calls
+let gasPriceCache = {
+    data: null,
+    lastUpdate: 0,
+    cacheTime: 30000 // 30 seconds cache
+};
 
 // WebSocket connection handling
 wss.on('connection', (ws) => {
@@ -54,9 +65,258 @@ function broadcast(message) {
     });
 }
 
+// Enhanced gas price calculation with real blockchain data
+async function calculateGasPrices() {
+    try {
+        // Check cache first
+        const now = Date.now();
+        if (gasPriceCache.data && (now - gasPriceCache.lastUpdate) < gasPriceCache.cacheTime) {
+            return gasPriceCache.data;
+        }
+
+        console.log('Fetching fresh gas price data...');
+
+        // Initialize provider
+        const rpcUrl = process.env.RPC_URL || "https://base-mainnet.g.alchemy.com/v2/your-api-key";
+        let provider;
+        
+        try {
+            provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+            
+            // Test connection
+            await provider.getNetwork();
+        } catch (rpcError) {
+            console.warn('RPC connection failed, using fallback provider');
+            // Fallback to a public Base RPC
+            provider = new ethers.providers.JsonRpcProvider("https://mainnet.base.org");
+        }
+
+        // Get current gas price from blockchain
+        const currentGasPrice = await provider.getGasPrice();
+        const currentGasPriceGwei = parseFloat(ethers.utils.formatUnits(currentGasPrice, 9));
+
+        console.log(`Current gas price: ${currentGasPriceGwei} Gwei`);
+
+        // Apply the same gas price logic as your script
+        const minGasPrice = ethers.utils.parseUnits("0.001", 9); // 0.001 Gwei minimum
+        let adjustedGasPrice = currentGasPrice.lt(minGasPrice) ? 
+            minGasPrice.mul(5) : currentGasPrice.mul(120).div(100); // 5x minimum or 20% boost
+
+        const adjustedGasPriceGwei = parseFloat(ethers.utils.formatUnits(adjustedGasPrice, 9));
+        const recommendedGasPriceGwei = adjustedGasPriceGwei * 1.1; // 10% higher for recommended
+
+        // Fetch ETH price from CoinGecko
+        let ethPriceUSD = 0; // Fallback price
+        
+        try {
+            const ethPriceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', {
+                timeout: 5000
+            });
+            
+            if (ethPriceResponse.ok) {
+                const ethPriceData = await ethPriceResponse.json();
+                ethPriceUSD = ethPriceData.ethereum.usd;
+                console.log(`ETH price: $${ethPriceUSD}`);
+            }
+        } catch (priceError) {
+            console.warn('Failed to fetch ETH price, using fallback:', priceError.message);
+        }
+
+        // Calculate costs for micro transactions
+        // Standard ETH transfer: 21,000 gas
+        // Smart contract swap: ~150,000-300,000 gas (we'll use 200,000 as average)
+        
+        const microTxGasLimit = 21000; // Simple ETH transfer
+        const swapTxGasLimit = 200000; // Average for swaps
+        
+        // Calculate costs using adjusted gas price
+        const microTxGasCostETH = (adjustedGasPriceGwei * microTxGasLimit) / 1e9; // Convert Gwei to ETH
+        const microTxGasCostUSD = microTxGasCostETH * ethPriceUSD;
+        
+        const swapTxGasCostETH = (adjustedGasPriceGwei * swapTxGasLimit) / 1e9;
+        const swapTxGasCostUSD = swapTxGasCostETH * ethPriceUSD;
+        
+        // Calculate for 1000 transactions
+        const cost1000MicroTxUSD = microTxGasCostUSD * 1000;
+        const cost1000SwapTxUSD = swapTxGasCostUSD * 1000;
+
+        // Create result object
+        const result = {
+            timestamp: new Date().toISOString(),
+            network: 'Base Mainnet',
+            
+            // Raw gas prices
+            currentGasPriceGwei: currentGasPriceGwei,
+            adjustedGasPriceGwei: adjustedGasPriceGwei,
+            recommendedGasPriceGwei: recommendedGasPriceGwei,
+            
+            // ETH price
+            ethPriceUSD: ethPriceUSD,
+            
+            // Micro transaction costs (21,000 gas)
+            costPerMicroTxETH: microTxGasCostETH.toFixed(8),
+            costPerMicroTxUSD: microTxGasCostUSD.toFixed(6),
+            costPer1000MicroTxUSD: cost1000MicroTxUSD.toFixed(2),
+            
+            // Swap transaction costs (200,000 gas average)
+            costPerSwapTxETH: swapTxGasCostETH.toFixed(8),
+            costPerSwapTxUSD: swapTxGasCostUSD.toFixed(6),
+            costPer1000SwapTxUSD: cost1000SwapTxUSD.toFixed(2),
+            
+            // For backward compatibility with frontend
+            costPerTxUSD: microTxGasCostUSD.toFixed(6),
+            costPer1000TxUSD: cost1000MicroTxUSD.toFixed(2),
+            
+            // Gas limits used
+            microTxGasLimit: microTxGasLimit,
+            swapTxGasLimit: swapTxGasLimit,
+            
+            // Network health indicators
+            gasMultiplier: adjustedGasPriceGwei / currentGasPriceGwei,
+            networkCongestion: currentGasPriceGwei > 2.0 ? 'High' : currentGasPriceGwei > 1.0 ? 'Medium' : 'Low'
+        };
+
+        // Update cache
+        gasPriceCache.data = result;
+        gasPriceCache.lastUpdate = now;
+
+        console.log('Gas price calculation completed:', {
+            gasPrice: `${adjustedGasPriceGwei.toFixed(3)} Gwei`,
+            ethPrice: `$${ethPriceUSD}`,
+            cost1000MicroTx: `$${cost1000MicroTxUSD.toFixed(2)}`,
+            cost1000SwapTx: `$${cost1000SwapTxUSD.toFixed(2)}`
+        });
+
+        return result;
+
+    } catch (error) {
+        console.error('Error calculating gas prices:', error);
+        
+        // Return fallback data if calculation fails
+        const fallbackData = {
+            timestamp: new Date().toISOString(),
+            network: 'Fallback Data',
+            error: error.message,
+            
+            currentGasPriceGwei: 1.0,
+            adjustedGasPriceGwei: 1.2,
+            recommendedGasPriceGwei: 1.32,
+            
+            ethPriceUSD: 3500,
+            
+            costPerMicroTxETH: "0.0000252",
+            costPerMicroTxUSD: "0.088200",
+            costPer1000MicroTxUSD: "88.20",
+            
+            costPerSwapTxETH: "0.0024000",
+            costPerSwapTxUSD: "8.400000",
+            costPer1000SwapTxUSD: "8400.00",
+            
+            costPerTxUSD: "0.088200",
+            costPer1000TxUSD: "88.20",
+            
+            microTxGasLimit: 21000,
+            swapTxGasLimit: 200000,
+            
+            gasMultiplier: 1.2,
+            networkCongestion: 'Unknown'
+        };
+        
+        return fallbackData;
+    }
+}
+
+// Gas prices API endpoint
+app.get('/api/gas-prices', async (req, res) => {
+    try {
+        const gasData = await calculateGasPrices();
+
+        console.log(gasData)
+        
+        res.json({
+            success: true,
+            ...gasData
+        });
+        
+    } catch (error) {
+        console.error('Gas prices API error:', error);
+        
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch gas prices',
+            details: error.message
+        });
+    }
+});
+
+// Gas cost estimation for specific transaction types
+app.post('/api/estimate-gas', async (req, res) => {
+    try {
+        const { transactionType = 'micro', quantity = 1 } = req.body;
+        
+        const gasData = await calculateGasPrices();
+        
+        let gasLimit, costPerTx, costPerTxUSD;
+        
+        switch (transactionType.toLowerCase()) {
+            case 'micro':
+            case 'transfer':
+                gasLimit = gasData.microTxGasLimit;
+                costPerTx = gasData.costPerMicroTxETH;
+                costPerTxUSD = gasData.costPerMicroTxUSD;
+                break;
+                
+            case 'swap':
+            case 'uniswap':
+                gasLimit = gasData.swapTxGasLimit;
+                costPerTx = gasData.costPerSwapTxETH;
+                costPerTxUSD = gasData.costPerSwapTxUSD;
+                break;
+                
+            default:
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid transaction type. Use "micro" or "swap"'
+                });
+        }
+        
+        const totalCostETH = (parseFloat(costPerTx) * quantity).toFixed(8);
+        const totalCostUSD = (parseFloat(costPerTxUSD) * quantity).toFixed(2);
+        
+        res.json({
+            success: true,
+            transactionType,
+            quantity,
+            gasPrice: gasData.adjustedGasPriceGwei,
+            gasLimit,
+            costPerTransaction: {
+                eth: costPerTx,
+                usd: costPerTxUSD
+            },
+            totalCost: {
+                eth: totalCostETH,
+                usd: totalCostUSD
+            },
+            networkInfo: {
+                congestion: gasData.networkCongestion,
+                ethPrice: gasData.ethPriceUSD,
+                timestamp: gasData.timestamp
+            }
+        });
+        
+    } catch (error) {
+        console.error('Gas estimation error:', error);
+        
+        res.status(500).json({
+            success: false,
+            error: 'Failed to estimate gas costs',
+            details: error.message
+        });
+    }
+});
+
 // Validate token address format
 function isValidTokenAddress(address) {
-    // Check if it's a valid Ethereum address (0x followed by 40 hex characters)
     return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
@@ -73,18 +333,15 @@ function validateCommand(command, args) {
     switch (command) {
         case 'volumeV2':
         case 'volumeV3':
-            // Validate wallet indices
             if (args[0] && !isValidNumber(args[0], 0)) {
                 errors.push('Start index must be a valid number >= 0');
             }
             if (args[1] && !isValidNumber(args[1], 1)) {
                 errors.push('End index must be a valid number >= 1');
             }
-            // Validate token address if provided
             if (args[2] && !isValidTokenAddress(args[2])) {
                 errors.push('Token address must be a valid Ethereum address (0x...)');
             }
-            // Validate timing parameters
             if (args[3] && !isValidNumber(args[3], 50, 60000)) {
                 errors.push('TX delay must be between 50-60000 milliseconds');
             }
@@ -158,7 +415,7 @@ app.post('/api/execute', async (req, res) => {
         // Spawn the Node.js process
         const childProcess = spawn('node', ['script.js', command, ...args], {
             cwd: __dirname,
-            env: { ...process.env, FORCE_COLOR: '0' } // Disable ANSI color codes
+            env: { ...process.env, FORCE_COLOR: '0' }
         });
         
         // Store the process
@@ -179,7 +436,6 @@ app.post('/api/execute', async (req, res) => {
             const output = data.toString();
             fullOutput += output;
             
-            // Broadcast real-time output to WebSocket clients
             broadcast({
                 type: 'output',
                 processId,
@@ -188,7 +444,6 @@ app.post('/api/execute', async (req, res) => {
                 command: command
             });
             
-            // Update stored process data
             if (activeProcesses.has(processId)) {
                 activeProcesses.get(processId).output += output;
             }
@@ -200,7 +455,6 @@ app.post('/api/execute', async (req, res) => {
             fullOutput += error;
             hasError = true;
             
-            // Broadcast error output to WebSocket clients
             broadcast({
                 type: 'error',
                 processId,
@@ -209,7 +463,6 @@ app.post('/api/execute', async (req, res) => {
                 command: command
             });
             
-            // Update stored process data
             if (activeProcesses.has(processId)) {
                 activeProcesses.get(processId).errors += error;
             }
@@ -220,7 +473,6 @@ app.post('/api/execute', async (req, res) => {
             exitCode = code;
             const success = code === 0 && !hasError;
             
-            // Broadcast completion status
             broadcast({
                 type: 'complete',
                 processId,
@@ -230,10 +482,8 @@ app.post('/api/execute', async (req, res) => {
                 command: command
             });
             
-            // Clean up process tracking
             activeProcesses.delete(processId);
             
-            // Send final response
             res.json({
                 success,
                 output: fullOutput,
@@ -279,7 +529,7 @@ app.post('/api/execute', async (req, res) => {
                     command: command
                 });
             }
-        }, 300000); // 5 minutes
+        }, 300000);
         
     } catch (error) {
         console.error('Execute error:', error);
@@ -321,7 +571,7 @@ app.post('/api/stop/:processId', (req, res) => {
     }
 });
 
-// Stop all processes
+// Enhanced stop all processes with force kill option
 app.post('/api/stop-all', (req, res) => {
     const stoppedProcesses = [];
     
@@ -350,6 +600,35 @@ app.post('/api/stop-all', (req, res) => {
     });
 });
 
+// Force kill all processes (for emergency situations)
+app.post('/api/force-kill', (req, res) => {
+    const killedProcesses = [];
+    
+    activeProcesses.forEach((processInfo, processId) => {
+        try {
+            processInfo.process.kill('SIGKILL'); // Force kill
+            killedProcesses.push(processId);
+        } catch (error) {
+            console.error(`Error force killing process ${processId}:`, error);
+        }
+    });
+    
+    broadcast({
+        type: 'all_stopped',
+        message: `Force killed ${killedProcesses.length} process(es)`,
+        timestamp: new Date().toISOString(),
+        killedProcesses
+    });
+    
+    activeProcesses.clear();
+    
+    res.json({ 
+        success: true, 
+        message: `Force killed ${killedProcesses.length} process(es)`,
+        killedProcesses 
+    });
+});
+
 // Get active processes
 app.get('/api/processes', (req, res) => {
     const processes = Array.from(activeProcesses.entries()).map(([id, info]) => ({
@@ -363,7 +642,7 @@ app.get('/api/processes', (req, res) => {
     res.json({ processes });
 });
 
-// Get system status
+// Get enhanced system status
 app.get('/api/status', (req, res) => {
     const scriptExists = fs.existsSync(path.join(__dirname, 'script.js'));
     const envExists = fs.existsSync(path.join(__dirname, '.env'));
@@ -374,7 +653,12 @@ app.get('/api/status', (req, res) => {
         activeProcesses: activeProcesses.size,
         uptime: process.uptime(),
         memory: process.memoryUsage(),
-        connections: wsConnections.size
+        connections: wsConnections.size,
+        gasCacheStatus: {
+            hasCache: gasPriceCache.data !== null,
+            lastUpdate: gasPriceCache.lastUpdate,
+            cacheAge: gasPriceCache.lastUpdate ? Date.now() - gasPriceCache.lastUpdate : 0
+        }
     });
 });
 
@@ -399,6 +683,7 @@ process.on('SIGINT', () => {
     // Stop all active processes
     activeProcesses.forEach((processInfo, processId) => {
         try {
+            console.log(`Stopping process ${processId}: ${processInfo.command}`);
             processInfo.process.kill('SIGTERM');
         } catch (error) {
             console.error(`Error stopping process ${processId}:`, error);
@@ -425,4 +710,13 @@ server.listen(PORT, () => {
     console.log(`🚀 TurboBot Web GUI running on http://localhost:${PORT}`);
     console.log(`📊 WebSocket server ready for real-time updates`);
     console.log(`📁 Serving files from: ${__dirname}/public`);
+    console.log(`⛽ Gas price API available at /api/gas-prices`);
+    console.log(`📈 Gas estimation API available at /api/estimate-gas`);
+    
+    // Initialize gas price cache on startup
+    calculateGasPrices().then(() => {
+        console.log('✅ Initial gas price data loaded');
+    }).catch(error => {
+        console.warn('⚠️  Failed to load initial gas price data:', error.message);
+    });
 });
