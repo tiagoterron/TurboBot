@@ -14,10 +14,11 @@ ENV_FILE="$SCRIPT_DIR/.env"
 LOG_FILE="$SCRIPT_DIR/automation.log"
 
 # External files configuration
-WALLET_MANAGER_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js"
-PACKAGE_JSON_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/package.json"
-SERVER_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/server.js"
-INDEX_HTML_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/public/index.html"
+TIMESTAMP=$(date +%s)
+WALLET_MANAGER_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js?cache_bust=$TIMESTAMP"
+PACKAGE_JSON_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/package.json?cache_bust=$TIMESTAMP"
+SERVER_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/server.js?cache_bust=$TIMESTAMP"
+INDEX_HTML_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/public/index.html?cache_bust=$TIMESTAMP"
 
 # Node.js configuration
 NODEJS_MIN_VERSION="16"
@@ -849,30 +850,21 @@ EOF
 update_external_scripts() {
     log "🔄 Updating external scripts..."
     
-    # Validate required variables
-    local required_vars=("WALLET_MANAGER_JS" "PACKAGE_JSON" "SERVER_JS" "INDEX_HTML" 
-                         "WALLET_MANAGER_URL" "PACKAGE_JSON_URL" "SERVER_JS_URL" "INDEX_HTML_URL")
-    
-    for var in "${required_vars[@]}"; do
-        if [[ -z "${!var}" ]]; then
-            error_log "❌ Required variable $var is not set"
-            return 1
-        fi
-    done
-    
-    # Create backup function with error checking
+    # Backup existing files first (for safety)
     backup_file() {
         local file="$1"
         if [[ -f "$file" ]]; then
-            if ! cp "$file" "$file.backup"; then
+            if cp "$file" "$file.backup"; then
+                log "📋 Backed up $file"
+                return 0
+            else
                 error_log "❌ Failed to backup $file"
                 return 1
             fi
-            log "📋 Backed up $file"
         fi
     }
     
-    # Backup existing files
+    # Backup files
     backup_file "$WALLET_MANAGER_JS" || return 1
     backup_file "$PACKAGE_JSON" || return 1
     backup_file "$SERVER_JS" || return 1
@@ -880,24 +872,31 @@ update_external_scripts() {
     
     local update_success=true
     
-    # Update with better error handling
+    # Update function that deletes old file first
     update_file() {
         local url="$1"
         local target="$2"
         local name="$3"
         
-        if download_file "$url" "$target.new"; then
-            if mv "$target.new" "$target"; then
-                log "✅ Updated $name"
-                return 0
-            else
-                error_log "❌ Failed to move $name to final location"
-                rm -f "$target.new"
-                return 1
-            fi
+        log "🔄 Updating $name..."
+        
+        # Delete the old file first
+        if [[ -f "$target" ]]; then
+            rm -f "$target"
+            log "🗑️ Deleted old $name"
+        fi
+        
+        # Download new file directly to target location
+        if download_file "$url" "$target"; then
+            log "✅ Updated $name"
+            return 0
         else
             error_log "❌ Failed to download $name"
-            rm -f "$target.new"
+            # Restore from backup if download failed
+            if [[ -f "$target.backup" ]]; then
+                cp "$target.backup" "$target"
+                log "🔄 Restored $name from backup"
+            fi
             return 1
         fi
     }
@@ -921,32 +920,14 @@ update_external_scripts() {
     update_file "$SERVER_JS_URL" "$SERVER_JS" "server.js" || warning_log "⚠️ Failed to update server.js"
     update_file "$INDEX_HTML_URL" "$INDEX_HTML" "index.html" || warning_log "⚠️ Failed to update index.html"
     
-    # Cleanup and restore on failure
+    # Cleanup
     if [[ "$update_success" == "true" ]]; then
-    log "✅ Core scripts updated successfully"
-    
-    # Check if files actually changed before cleanup
-    if [[ -f "$WALLET_MANAGER_JS.backup" ]]; then
-        if cmp -s "$WALLET_MANAGER_JS" "$WALLET_MANAGER_JS.backup"; then
-            warning_log "⚠️ script.js: No changes detected (identical to backup)"
-        else
-            log "✅ script.js: File successfully updated with changes"
-        fi
+        log "✅ Core scripts updated successfully"
+        rm -f "$WALLET_MANAGER_JS.backup" "$PACKAGE_JSON.backup" "$SERVER_JS.backup" "$INDEX_HTML.backup"
+    else
+        error_log "❌ Some core updates failed. Backup files preserved for recovery."
+        return 1
     fi
-    
-    if [[ -f "$PACKAGE_JSON.backup" ]]; then
-        if cmp -s "$PACKAGE_JSON" "$PACKAGE_JSON.backup"; then
-            warning_log "⚠️ package.json: No changes detected (identical to backup)"  
-        else
-            log "✅ package.json: File successfully updated with changes"
-        fi
-    fi
-    
-    # Now clean up backups
-    rm -f "$WALLET_MANAGER_JS.backup" "$PACKAGE_JSON.backup"
-else
-    warning_log "Some core updates failed. Backup files preserved."
-fi
 }
 
 # Function to validate external scripts

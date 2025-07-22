@@ -1,4 +1,4 @@
-//V 1.0.7
+//V 1.0.8
 const express = require('express');
 const { spawn } = require('child_process');
 const WebSocket = require('ws');
