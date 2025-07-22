@@ -1272,6 +1272,8 @@ function loadConfiguration() {
         } catch (e) {
             logToTerminal('⚠️ Failed to load saved configuration', 'warning');
         }
+    }else{
+        document.getElementById('gasMax').value = "0.0001";
     }
 }
 
