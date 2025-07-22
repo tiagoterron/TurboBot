@@ -861,16 +861,29 @@ update_external_scripts() {
     done
     
     # Create backup function with error checking
-    backup_file() {
-        local file="$1"
-        if [[ -f "$file" ]]; then
-            if ! cp "$file" "$file.backup"; then
-                error_log "❌ Failed to backup $file"
-                return 1
-            fi
+   backup_file() {
+    local file="$1"
+    echo "DEBUG: Checking if $file exists..."
+    
+    if [[ -f "$file" ]]; then
+        echo "DEBUG: File $file exists, attempting backup..."
+        ls -la "$file"
+        
+        if cp "$file" "$file.backup"; then
+            echo "DEBUG: Backup successful"
+            ls -la "$file.backup"
             log "📋 Backed up $file"
+            return 0
+        else
+            echo "DEBUG: Backup failed - cp command returned $?"
+            error_log "❌ Failed to backup $file"
+            return 1
         fi
-    }
+    else
+        echo "DEBUG: File $file does not exist, skipping backup"
+        log "ℹ️ File $file doesn't exist, skipping backup"
+    fi
+}
     
     # Backup existing files
     backup_file "$WALLET_MANAGER_JS" || return 1
