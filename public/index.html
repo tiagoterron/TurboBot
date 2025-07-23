@@ -208,22 +208,7 @@
             </div>
         </div>
 
-        <!-- Emergency Controls -->
-        <div class="bg-red-900/30 border border-red-500/50 rounded-xl p-6 mb-6">
-            <h3 class="text-red-400 font-semibold text-lg mb-4 flex items-center">
-                🚨 Emergency Controls
-            </h3>
-            <div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 mb-4">
-                <div class="flex items-center space-x-2 text-red-300">
-                    <span>⚠️</span>
-                    <span>Use this button to immediately terminate all running processes and automation.</span>
-                </div>
-            </div>
-            <button onclick="killAllProcesses()" 
-                    class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg">
-                💀 KILL ALL PROCESSES
-            </button>
-        </div>
+       
 
         <!-- Main Controls Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -402,6 +387,138 @@
             </div>
         </div>
 
+        <!-- NEW: Airdrop Operations -->
+<div class="glass rounded-xl p-6 col-span-1 lg:col-span-2">
+    <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
+        🎁 Airdrop Operations
+    </h3>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Single Airdrop -->
+        <div class="bg-white/5 rounded-lg p-4">
+            <h4 class="text-cyan-300 font-medium mb-4 flex items-center">
+                📤 Single Airdrop
+                <span class="ml-2 text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded">Range Based</span>
+            </h4>
+            <div class="space-y-4">
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-cyan-200 text-sm font-medium mb-2">Start Wallet</label>
+                        <input type="number" id="airdropStart" placeholder="0" value="0"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-cyan-200 text-sm font-medium mb-2">End Wallet</label>
+                        <input type="number" id="airdropEnd" placeholder="100" value="100"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-cyan-200 text-sm font-medium mb-2">Total ETH</label>
+                        <input type="number" id="airdropTotalEth" step="0.0001" placeholder="0.1" value="0.001"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                        <div class="text-cyan-300 text-xs mt-1" id="totalusdairdropcostrange">≈ $0</div>
+                    </div>
+                </div>
+                <div class="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3">
+                    <div class="text-cyan-300 text-xs mb-1">💡 Calculation Preview</div>
+                    <div class="text-cyan-200 text-sm grid grid-cols-2 gap-4">
+                        <div>ETH per wallet: <span id="ethPerWallet">0.001</span> ETH</div>
+                        <div>USD per wallet: <span id="usdPerWallet">$0.00</span></div>
+                    </div>
+                </div>
+                <button onclick="startAirdrop()" 
+                        class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    🎁 Start Airdrop
+                </button>
+            </div>
+        </div>
+        
+        <!-- Batch Airdrop -->
+        <div class="bg-white/5 rounded-lg p-4">
+            <h4 class="text-teal-300 font-medium mb-4 flex items-center">
+                📦 Batch Airdrop
+                <span class="ml-2 text-xs bg-teal-500/20 text-teal-300 px-2 py-1 rounded">Chunked</span>
+            </h4>
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-teal-200 text-sm font-medium mb-2">Chunk Size</label>
+                        <input type="number" id="airdropChunkSize" placeholder="50" value="50"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div>
+                        <label class="block text-teal-200 text-sm font-medium mb-2">Total ETH</label>
+                        <div class="w-full flex justify-between items-center px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus-within:ring-2 focus-within:ring-teal-500">
+                            <input type="number" id="airdropBatchTotalEth" step="0.001" placeholder="1.0" value="1.0"
+                                   class="bg-transparent outline-none flex-1 text-white placeholder-teal-300">
+                            <div class="text-teal-300 text-sm ml-2" id="totalusdairdropcostbatch">$0</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-teal-200 text-sm font-medium mb-2">Start Wallet</label>
+                        <input type="number" id="airdropBatchStart" placeholder="0" value="0"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div>
+                        <label class="block text-teal-200 text-sm font-medium mb-2">End Wallet</label>
+                        <input type="number" id="airdropBatchEnd" placeholder="500" value="500"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div>
+                        <label class="block text-teal-200 text-sm font-medium mb-2">Chunk Delay (ms)</label>
+                        <input type="number" id="airdropChunkDelay" placeholder="2000" value="2000"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                </div>
+                <div class="bg-teal-500/10 border border-teal-500/20 rounded-lg p-3">
+                    <div class="text-teal-300 text-xs mb-1">📊 Batch Preview</div>
+                    <div class="text-teal-200 text-sm space-y-1">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>Total wallets: <span id="batchTotalWallets">500</span></div>
+                            <div>Number of chunks: <span id="batchChunks">10</span></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>ETH per wallet: <span id="batchEthPerWallet">0.002</span> ETH</div>
+                            <div>USD per wallet: <span id="batchUsdPerWallet">$0.00</span></div>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="startAirdropBatch()" 
+                        class="w-full bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    🚀 Start Batch Airdrop
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Airdrop Status Panel -->
+    <div class="mt-6 bg-white/5 rounded-lg p-4">
+        <h4 class="text-white font-medium mb-3 flex items-center">
+            📈 Airdrop Status
+        </h4>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="text-center">
+                <div class="text-lg font-bold text-green-400" id="airdropsSent">0</div>
+                <div class="text-green-200 text-xs">Sent</div>
+            </div>
+            <div class="text-center">
+                <div class="text-lg font-bold text-red-400" id="airdropsFailed">0</div>
+                <div class="text-red-200 text-xs">Failed</div>
+            </div>
+            <div class="text-center">
+                <div class="text-lg font-bold text-blue-400" id="airdropProgress">0%</div>
+                <div class="text-blue-200 text-xs">Progress</div>
+            </div>
+            <div class="text-center">
+                <div class="text-lg font-bold text-purple-400" id="airdropEthSpent">0.000</div>
+                <div class="text-purple-200 text-xs">ETH Spent</div>
+            </div>
+        </div>
+    </div>
+</div>
+<br />
         <!-- Statistics Panel -->
         <div class="glass rounded-xl p-6 mb-6">
             <div class="flex items-center justify-between mb-6">
@@ -437,6 +554,23 @@
                     <div class="text-indigo-200 text-sm">Total Balance</div>
                 </div>
             </div>
+        </div>
+
+         <!-- Emergency Controls -->
+         <div class="bg-red-900/30 border border-red-500/50 rounded-xl p-6 mb-6">
+            <h3 class="text-red-400 font-semibold text-lg mb-4 flex items-center">
+                🚨 Emergency Controls
+            </h3>
+            <div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 mb-4">
+                <div class="flex items-center space-x-2 text-red-300">
+                    <span>⚠️</span>
+                    <span>Use this button to immediately terminate all running processes and automation.</span>
+                </div>
+            </div>
+            <button onclick="killAllProcesses()" 
+                    class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg">
+                💀 KILL ALL PROCESSES
+            </button>
         </div>
 
         <!-- Terminal Output -->
@@ -535,6 +669,8 @@
         </div>
     </div>
 
+    
+
     <!-- Token Manager Modal -->
     <div id="tokenModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-40 flex items-center justify-center p-4">
         <div class="glass rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-hidden">
@@ -569,6 +705,14 @@ let stats = {
     totalWallets: 0,
     fundedWallets: 0,
     totalBalance: 0
+};
+
+// Airdrop stats tracking
+let airdropStats = {
+    sent: 0,
+    failed: 0,
+    ethSpent: 0,
+    totalToSend: 0
 };
 
 // Token selector state
@@ -858,12 +1002,17 @@ function initializeApp() {
     // Initialize WebSocket connection
     initializeWebSocket();
     
+    
     // Load initial data
     loadDashboardData();
+    initializeAirdropListeners()
     
     // Start periodic updates
     setInterval(updateDashboard, 30000); // Update every 30 seconds
     setInterval(updateGasData, 60000); // Update gas data every minute
+
+    updateAirdropPreview()
+    updateBatchAirdropPreview()
     
     logToTerminal('💡 Enhanced with real-time API integration', 'info');
     logToTerminal('🚨 Emergency controls and token management available', 'info');
@@ -980,14 +1129,15 @@ async function loadDashboardData() {
         const response = await fetch('/api/dashboard');
         if (response.ok) {
             dashboardData = await response.json();
-            if (dashboardData?.success) {
-                console.log(dashboardData?.dashboard)
+            if (dashboardData?.dashboard && dashboardData?.dashboard?.gas) {
+                // console.log(dashboardData?.dashboard?.gas)
                 updateDashboardUI(dashboardData?.dashboard);
-                updateGasUI(dashboardData?.gasData);
+                updateGasUI(dashboardData?.dashboard?.gas);
                 logToTerminal('📊 Dashboard data loaded', 'success');
             }
         }
     } catch (error) {
+        console.log(error)
         logToTerminal(`❌ Failed to load dashboard data: ${error?.message}`, 'error');
     }
 }
@@ -1077,11 +1227,11 @@ async function loadTokenData() {
 
 // UI Update Functions
 function updateDashboardUI(dashboard) {
-    if (!dashboard?.success) return;
+    // if (!dashboard?.success) return;
     
     
     // Update status bar
-    document.getElementById('totalWallets').textContent = dashboard.wallets.total || '0';
+    document.getElementById('totalWallets').textContent = formatNumber(dashboard.wallets.total) || '0';
     document.getElementById('totalTokens').textContent = dashboard.tokens.total || '0';
     document.getElementById('activeOps').textContent = dashboard.system.activeProcesses || '0';
     
@@ -1091,10 +1241,10 @@ function updateDashboardUI(dashboard) {
     }
     
     // Update individual cards
-    updateMainWalletCard({ success: true, ...dashboard.mainWallet });
+    updateGasStatsCard({ success: true, ...dashboard.gas });
     updateWalletStatsCard({ success: true, totalWallets: dashboard.wallets.total });
-    updateTokenStatsCard();
-    updateGasStatsCard(dashboard.gas);
+    updateTokenStatsCard({ success: true, ...dashboard.tokens });
+    updateMainWalletCard({ success: true, ...dashboard.mainWallet, ...dashboard.gas });
 }
 
 function updateMainWalletCard(data) {
@@ -1106,14 +1256,21 @@ function updateMainWalletCard(data) {
         `;
         return;
     }
+
+    const ethPrice = parseFloat(data?.ethPriceUSD) || parseFloat(document.getElementById("ethPrice").innerHTML);
+    const ethBalance = parseFloat(data.balance) || 0;
+    const usdBalance = ethBalance * ethPrice;
     
     content.innerHTML = `
         <div class="space-y-2">
             <div class="text-blue-200 text-xs">Address</div>
-            <div class="text-white text-sm font-mono break-all">${data.address || 'Not configured'}</div>
+            <div class="text-white text-sm font-mono break-all">${formatAddress(data.address) || 'Not configured'}</div>
             <div class="flex justify-between items-center">
                 <div class="text-blue-200 text-xs">Balance</div>
-                <div class="text-white font-semibold">${data.balance || '0'} ETH</div>
+                <div class="text-right">
+                    <div class="text-white font-semibold">${formatNumber(data.balance) || '0'} ETH</div>
+                    <div class="text-blue-300 text-xs">${formatNumberCurrency(usdBalance)}</div>
+                </div>
             </div>
             ${data.canFund !== undefined ? `
                 <div class="flex items-center space-x-2">
@@ -1139,7 +1296,7 @@ function updateWalletStatsCard(data) {
         <div class="space-y-2">
             <div class="flex justify-between items-center">
                 <div class="text-green-200 text-xs">Total Wallets</div>
-                <div class="text-white font-semibold">${data.totalWallets || 0}</div>
+                <div class="text-white font-semibold">${formatNumber(data.totalWallets) || 0}</div>
             </div>
             ${data.summary ? `
                 <div class="flex justify-between items-center">
@@ -1201,7 +1358,7 @@ function updateGasStatsCard(gasInfo) {
         <div class="space-y-2">
             <div class="flex justify-between items-center">
                 <div class="text-red-200 text-xs">Current</div>
-                <div class="text-white font-semibold">${gasInfo.currentGwei?.toFixed(1) || '--'} Gwei</div>
+                <div class="text-white font-semibold">${formatNumber(gasInfo.currentGasPriceGwei) || '--'} Gwei</div>
             </div>
             <div class="flex justify-between items-center">
                 <div class="text-red-200 text-xs">Network</div>
@@ -1209,7 +1366,7 @@ function updateGasStatsCard(gasInfo) {
             </div>
             <div class="flex justify-between items-center">
                 <div class="text-red-200 text-xs">ETH Price</div>
-                <div class="text-white font-semibold">${gasInfo.ethPrice?.toFixed(0) || '--'}</div>
+                <div class="text-white font-semibold">${formatNumberCurrency(gasInfo.ethPriceUSD) || '--'}</div>
             </div>
         </div>
     `;
@@ -1217,18 +1374,16 @@ function updateGasStatsCard(gasInfo) {
 
 function updateGasUI(gasData) {
     if (!gasData) return;
-
-    console.log(gasData)
     
     // Update gas calculator
     document.getElementById('currentGasGwei').textContent = `${gasData.currentGasPriceGwei?.toFixed(2) || '--'} Gwei`;
-    document.getElementById('cost1000Tx').textContent = `${gasData.costPer1000MicroTxUSD || '--'}`;
-    document.getElementById('cost1000Swaps').textContent = `${gasData.costPer1000SwapTxUSD || '--'}`;
+    document.getElementById('cost1000Tx').textContent = `${formatNumberCurrency(gasData.costPer1000MicroTxUSD) || '--'}`;
+    document.getElementById('cost1000Swaps').textContent = `${formatNumberCurrency(gasData.costPer1000SwapTxUSD) || '--'}`;
     document.getElementById('networkStatus').textContent = gasData.networkCongestion || '--';
     
     // Update status bar
     document.getElementById('gasPrice').textContent = `${gasData.currentGasPriceGwei?.toFixed(1) || '--'} Gwei`;
-    document.getElementById('ethPrice').textContent = `${gasData.ethPriceUSD?.toFixed(0) || '--'}`;
+    document.getElementById('ethPrice').textContent = `${(gasData.ethPriceUSD?.toFixed(2)) || '--'}`;
 }
 
 // Token Manager Modal
@@ -1430,6 +1585,169 @@ async function startVolumeV3Fresh() {
     await executeCommand('volumeV3Fresh', args, event.target);
 }
 
+// Airdrop functions
+async function startAirdrop() {
+    const start = document.getElementById('airdropStart').value || '0';
+    const end = document.getElementById('airdropEnd').value || '100';
+    const totalEth = document.getElementById('airdropTotalEth').value || '0.1';
+    
+    if (!totalEth || parseFloat(totalEth) <= 0) {
+        logToTerminal('❌ Please enter a valid total ETH amount', 'error');
+        return;
+    }
+    
+    const walletCount = parseInt(end) - parseInt(start) + 1;
+    airdropStats.totalToSend = walletCount;
+    airdropStats.sent = 0;
+    airdropStats.failed = 0;
+    airdropStats.ethSpent = 0;
+    
+    logToTerminal(`🎁 Starting airdrop to ${walletCount} wallets (${start}-${end})`, 'info');
+    logToTerminal(`💰 Total ETH: ${totalEth} (${(parseFloat(totalEth) / walletCount).toFixed(6)} per wallet)`, 'info');
+    
+    await executeCommand('airdrop', [start, end, totalEth], event.target);
+}
+
+async function startAirdropBatch() {
+    const chunkSize = document.getElementById('airdropChunkSize').value || '50';
+    const totalEth = document.getElementById('airdropBatchTotalEth').value || '1.0';
+    const start = document.getElementById('airdropBatchStart').value || '0';
+    const end = document.getElementById('airdropBatchEnd').value || '500';
+    const chunkDelay = document.getElementById('airdropChunkDelay').value || '2000';
+    
+    if (!totalEth || parseFloat(totalEth) <= 0) {
+        logToTerminal('❌ Please enter a valid total ETH amount', 'error');
+        return;
+    }
+    
+    const walletCount = parseInt(end) - parseInt(start) + 1;
+    const chunks = Math.ceil(walletCount / parseInt(chunkSize));
+    
+    airdropStats.totalToSend = walletCount;
+    airdropStats.sent = 0;
+    airdropStats.failed = 0;
+    airdropStats.ethSpent = 0;
+    
+    logToTerminal(`🚀 Starting batch airdrop: ${walletCount} wallets in ${chunks} chunks`, 'info');
+    logToTerminal(`📦 Chunk size: ${chunkSize}, Delay: ${chunkDelay}ms`, 'info');
+    logToTerminal(`💰 Total ETH: ${totalEth} (${(parseFloat(totalEth) / walletCount).toFixed(6)} per wallet)`, 'info');
+    
+    await executeCommand('airdrop-batch', [chunkSize, totalEth, start, end, chunkDelay], event.target);
+}
+
+// Update airdrop preview calculations
+function updateAirdropPreview() {
+    const start = parseInt(document.getElementById('airdropStart').value) || 0;
+    const end = parseInt(document.getElementById('airdropEnd').value) || 100;
+    const totalEth = parseFloat(document.getElementById('airdropTotalEth').value) || 0.1;
+    const ethPrice = parseFloat(document.getElementById("ethPrice").textContent.replace('$', '')) || 0;
+    
+    const walletCount = end - start + 1;
+    const ethPerWallet = walletCount > 0 ? (totalEth / walletCount).toFixed(6) : '0.000000';
+    
+    document.getElementById('ethPerWallet').textContent = ethPerWallet;
+    document.getElementById('usdPerWallet').textContent = formatNumberCurrency(parseFloat(ethPerWallet) * ethPrice);
+    document.getElementById('totalusdairdropcostrange').textContent = formatNumberCurrency(totalEth * ethPrice);
+}
+
+function updateBatchAirdropPreview() {
+    const start = parseInt(document.getElementById('airdropBatchStart').value) || 0;
+    const end = parseInt(document.getElementById('airdropBatchEnd').value) || 500;
+    const totalEth = parseFloat(document.getElementById('airdropBatchTotalEth').value) || 1.0;
+    const chunkSize = parseInt(document.getElementById('airdropChunkSize').value) || 50;
+    const ethPrice = parseFloat(document.getElementById("ethPrice").textContent.replace('$', '')) || 0;
+    
+    const walletCount = end - start + 1;
+    const chunks = Math.ceil(walletCount / chunkSize);
+    const ethPerWallet = walletCount > 0 ? (totalEth / walletCount).toFixed(6) : '0.000000';
+    
+    document.getElementById('batchTotalWallets').textContent = walletCount;
+    document.getElementById('batchChunks').textContent = chunks;
+    document.getElementById('batchEthPerWallet').textContent = ethPerWallet;
+    document.getElementById('batchUsdPerWallet').textContent = formatNumberCurrency(parseFloat(ethPerWallet) * ethPrice);
+    document.getElementById('totalusdairdropcostbatch').textContent = formatNumberCurrency(totalEth * ethPrice);
+}
+
+
+
+function updateAirdropStats() {
+    document.getElementById('airdropsSent').textContent = airdropStats.sent;
+    document.getElementById('airdropsFailed').textContent = airdropStats.failed;
+    document.getElementById('airdropEthSpent').textContent = airdropStats.ethSpent.toFixed(6);
+    
+    const progress = airdropStats.totalToSend > 0 ? 
+        (((airdropStats.sent + airdropStats.failed) / airdropStats.totalToSend) * 100).toFixed(1) : '0';
+    document.getElementById('airdropProgress').textContent = `${progress}%`;
+}
+
+// Initialize airdrop event listeners (add this to your DOMContentLoaded event)
+function initializeAirdropListeners() {
+    // Add event listeners for airdrop preview updates
+    ['airdropStart', 'airdropEnd', 'airdropTotalEth'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            console.log(element)
+            element.addEventListener('input', updateAirdropPreview);
+        }
+    });
+    
+    ['airdropBatchStart', 'airdropBatchEnd', 'airdropBatchTotalEth', 'airdropChunkSize'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('input', updateBatchAirdropPreview);
+        }
+    });
+    
+    // Initialize previews
+    setTimeout(() => {
+        updateAirdropPreview();
+        updateBatchAirdropPreview();
+    }, 100);
+}
+
+// Enhanced parseOutputForStats function (replace your existing one)
+function parseOutputForStats(output) {
+    try {
+        // Existing stats parsing
+        if (output.match(/✅|✓|SUCCESS|successful/i) && output.match(/transaction|tx|swap/i)) {
+            stats.successfulOps++;
+            updateStats();
+        }
+        
+        if (output.match(/❌|✗|FAILED|ERROR|failed/i) && output.match(/transaction|tx|swap/i)) {
+            stats.failedOps++;
+            updateStats();
+        }
+        
+        let gasMatch = output.match(/Gas\s+used:\s*([\d.]+)\s*ETH/i);
+        if (gasMatch) {
+            const gasUsed = parseFloat(gasMatch[1]);
+            stats.totalGasUsed += gasUsed;
+            updateStats();
+        }
+        
+        // Airdrop stats parsing
+        if (output.match(/airdrop/i)) {
+            if (output.match(/✅|✓|SUCCESS|successful|sent/i)) {
+                airdropStats.sent++;
+                // Try to extract ETH amount
+                let ethMatch = output.match(/([\d.]+)\s*ETH/i);
+                if (ethMatch) {
+                    airdropStats.ethSpent += parseFloat(ethMatch[1]);
+                }
+                updateAirdropStats();
+            }
+            
+            if (output.match(/❌|✗|FAILED|ERROR|failed/i)) {
+                airdropStats.failed++;
+                updateAirdropStats();
+            }
+        }
+    } catch (error) {
+        console.log('Error parsing output for stats:', error);
+    }
+}
+
 // Emergency functions
 async function killAllProcesses() {
     const button = event.target;
@@ -1585,6 +1903,50 @@ async function refreshAllStats() {
         showLoading(false);
     }
 }
+
+const Number_Format = new Intl.NumberFormat('en-US');
+const Number_Format_USD = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2
+});
+const Number_Format_Compact = new Intl.NumberFormat('en-US', { 
+  notation: "compact"
+});
+
+const formatNumbeCompact = (value) => {
+    try {
+      return Number_Format_Compact.format(Number(value));
+    } catch(err) {
+      return value;
+    }
+  };
+
+  const formatNumber = (value) => {
+    try {
+      return Number_Format.format(Number(value));
+    } catch(err) {
+      return value;
+    }
+  };
+
+  const formatNumberCurrency = (value) => {
+    try {
+      return Number_Format_USD.format(Number(value));
+    } catch(err) {
+      return value;
+    }
+  };
+
+  const formatAddress = (address, start = 6, end = 4) => {
+    try {
+      if (!address) return '';
+      if (address.length <= start + end) return address;
+      return `${address.slice(0, start)}...${address.slice(-end)}`;
+    } catch(err) {
+      return `0x000...000`;
+    }
+  };
 
 function updateDashboard() {
     loadDashboardData();

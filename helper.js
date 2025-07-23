@@ -934,10 +934,40 @@ async function checkWallets() {
     }
 }
 
+const Number_Format = new Intl.NumberFormat('en-US');
+const Number_Format_USD = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2
+});
+const Number_Format_Compact = new Intl.NumberFormat('en-US', { 
+  notation: "compact"
+});
+
+const formatNumber = (value) => {
+    try {
+      return Number_Format_Compact.format(Number(value));
+    } catch(err) {
+      return value;
+    }
+  };
+
+  const formatAddress = (address, start = 6, end = 4) => {
+    try {
+      if (!address) return '';
+      if (address.length <= start + end) return address;
+      return `${address.slice(0, start)}...${address.slice(-end)}`;
+    } catch(err) {
+      return `0x000...000`;
+    }
+  };
+
 
 module.exports = {
     config,
     provider,
+    formatNumber,
+    formatAddress,
     contracts,
     routerAbi,
     airdropAbi,

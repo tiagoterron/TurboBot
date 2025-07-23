@@ -1249,7 +1249,7 @@ async function executeV3Swap(index, wallets, tokenAddress) {
     }
 }
 
-async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount = null, delayBetweenChunks = 3000) {
+async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount = null, startAt = 0, endAt = null, delayBetweenChunks = 3000) {
     log(`Starting airdrop batch processing with enhanced controls:`);
     log(`• Chunk size: ${chunkSize} wallets per transaction`);
     log(`• Delay between chunks: ${delayBetweenChunks}ms`);
@@ -1261,24 +1261,35 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
     const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
     log(`• Gas max limit: ${gasMaxETH} ETH`);
     
-    const wallets = loadWallets();
-    if (wallets.length === 0) {
+    const allWallets = loadWallets();
+    if (allWallets.length === 0) {
         throw new Error('No wallets found. Create wallets first.');
     }
     
-    log(`• Found ${wallets.length} wallets for airdrop`);
+    // Apply range filtering
+    const actualEndAt = endAt !== null ? Math.min(endAt, allWallets.length) : allWallets.length;
+    const actualStartAt = Math.max(0, Math.min(startAt, allWallets.length - 1));
+    
+    if (actualStartAt >= actualEndAt) {
+        throw new Error(`Invalid range: startAt (${actualStartAt}) must be less than endAt (${actualEndAt})`);
+    }
+    
+    const wallets = allWallets.slice(actualStartAt, actualEndAt);
+    
+    log(`• Total wallets available: ${allWallets.length}`);
+    log(`• Processing range: ${actualStartAt} to ${actualEndAt - 1} (${wallets.length} wallets)`);
     
     let amountPerWallet;
     let totalDistribution;
     
     if (totalEthAmount) {
-        // Calculate amount per wallet for the entire batch
+        // Calculate amount per wallet for the selected range
         totalDistribution = ethers.utils.parseUnits(totalEthAmount.toString(), 18);
         amountPerWallet = totalDistribution.div(wallets.length);
         
         log(`\n📊 Airdrop Distribution Summary:`);
         log(`• Total ETH to distribute: ${totalEthAmount} ETH`);
-        log(`• Total wallets: ${wallets.length}`);
+        log(`• Wallets in range: ${wallets.length}`);
         log(`• ETH per wallet: ${ethers.utils.formatEther(amountPerWallet)} ETH`);
         
         // Verify we have enough balance
@@ -1312,6 +1323,10 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
         const recipients = wallets.slice(start, end).map(wallet => wallet[0]);
         const chunkNumber = Math.floor(start / chunkSize) + 1;
         
+        // Calculate actual wallet indices for logging
+        const actualWalletStart = actualStartAt + start;
+        const actualWalletEnd = actualStartAt + end - 1;
+        
         try {
             let chunkValue;
             
@@ -1319,12 +1334,12 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
                 // Calculate the portion of total ETH for this chunk
                 chunkValue = amountPerWallet.mul(recipientsInChunk);
                 const chunkAmountEth = ethers.utils.formatEther(chunkValue);
-                log(`🔄 Processing chunk ${chunkNumber}/${totalChunks} (wallets ${start}-${end-1}): ${chunkAmountEth} ETH for ${recipientsInChunk} wallets`);
+                log(`🔄 Processing chunk ${chunkNumber}/${totalChunks} (wallets ${actualWalletStart}-${actualWalletEnd}): ${chunkAmountEth} ETH for ${recipientsInChunk} wallets`);
             } else {
                 // Use default amount per wallet
                 const defaultAmount = ethers.utils.parseUnits("0.0015", 18);
                 chunkValue = defaultAmount.mul(recipientsInChunk);
-                log(`🔄 Processing chunk ${chunkNumber}/${totalChunks} (wallets ${start}-${end-1}): ${ethers.utils.formatEther(chunkValue)} ETH for ${recipientsInChunk} wallets (0.0015 ETH each)`);
+                log(`🔄 Processing chunk ${chunkNumber}/${totalChunks} (wallets ${actualWalletStart}-${actualWalletEnd}): ${ethers.utils.formatEther(chunkValue)} ETH for ${recipientsInChunk} wallets (0.0015 ETH each)`);
             }
             
             // Prepare transaction data
@@ -1367,7 +1382,7 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
                 gasLimitExceeded++;
                 totalFailed += recipientsInChunk;
                 skippedChunks.push({
-                    range: `${start}-${end-1}`,
+                    range: `${actualWalletStart}-${actualWalletEnd}`,
                     recipients: recipientsInChunk,
                     reason: 'gas_cost_exceeds_max',
                     gasCost: totalGasCostETH,
@@ -1414,7 +1429,7 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
                 
                 totalSuccessful += recipientsInChunk;
                 completedChunks.push({
-                    range: `${start}-${end-1}`,
+                    range: `${actualWalletStart}-${actualWalletEnd}`,
                     txHash: receipt.transactionHash,
                     recipients: recipientsInChunk,
                     amount: ethers.utils.formatEther(chunkValue),
@@ -1448,7 +1463,8 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
     
     log(`\n🎯 Final Airdrop Summary:`);
     log(`📊 Results:`);
-    log(`   • Total wallets: ${wallets.length}`);
+    log(`   • Wallet range processed: ${actualStartAt} to ${actualEndAt - 1}`);
+    log(`   • Total wallets in range: ${wallets.length}`);
     log(`   • Successful airdrops: ${totalSuccessful} (${successRate}%)`);
     log(`   • Failed airdrops: ${totalFailed}`);
     log(`   • Gas limit exceeded: ${gasLimitExceeded} chunks`);
@@ -1467,7 +1483,7 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
     if (completedChunks.length > 0) {
         log(`\n🔗 Successful Transactions:`);
         completedChunks.forEach((chunk, index) => {
-            log(`   ${index + 1}. Chunk ${chunk.range}: ${chunk.txHash}`);
+            log(`   ${index + 1}. Wallets ${chunk.range}: ${chunk.txHash}`);
             log(`      • Recipients: ${chunk.recipients} wallets`);
             log(`      • Amount: ${chunk.amount} ETH`);
             log(`      • Gas cost: ${chunk.actualGasCost} ETH (${chunk.gasEfficiency}% efficiency)`);
@@ -1478,7 +1494,7 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
     if (skippedChunks.length > 0) {
         log(`\n⚠️  Skipped Chunks (High Gas):`);
         skippedChunks.forEach((chunk, index) => {
-            log(`   ${index + 1}. Chunk ${chunk.range}: ${chunk.recipients} wallets`);
+            log(`   ${index + 1}. Wallets ${chunk.range}: ${chunk.recipients} wallets`);
             log(`      • Reason: Gas cost ${chunk.gasCost} ETH > limit ${chunk.gasLimit} ETH`);
         });
     }
@@ -1491,7 +1507,7 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
     }
     
     const success = totalFailed === 0;
-    log(`\n${success ? '✅' : '⚠️'} Airdrop batch ${success ? 'completed successfully' : 'completed with issues'} - Distributed to ${totalSuccessful}/${wallets.length} wallets`);
+    log(`\n${success ? '✅' : '⚠️'} Airdrop batch ${success ? 'completed successfully' : 'completed with issues'} - Distributed to ${totalSuccessful}/${wallets.length} wallets in range ${actualStartAt}-${actualEndAt - 1}`);
     
     return {
         success,
@@ -1504,7 +1520,12 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
         skippedChunks,
         chunkSize,
         totalChunks,
-        actualDistributed: totalEthAmount ? (totalSuccessful / wallets.length) * totalEthAmount : null
+        actualDistributed: totalEthAmount ? (totalSuccessful / wallets.length) * totalEthAmount : null,
+        walletRange: {
+            startAt: actualStartAt,
+            endAt: actualEndAt - 1,
+            processed: wallets.length
+        }
     };
 }
 
@@ -4499,7 +4520,7 @@ CONTRACT DEPLOYMENT & MANAGEMENT:
                                      - Uses executeV3Swap() function for V3 pools
 
 ⚡ ENHANCED BATCH OPERATIONS:
-  airdrop-batch [chunk_size] [total_eth] [delay_chunks]
+  airdrop-batch [chunk_size] [total_eth] [ini] [end] [delay_chunks]
                                      - Send airdrops with gas management (default: ${config.defaultChunkSize})
                                      - Skips chunks when gas exceeds limits
                                      - Configurable delays between chunks
@@ -4791,10 +4812,16 @@ async function main() {
             }
             break;
                 
+
             case 'airdrop-batch':
+                var chunkSize = parseInt(args[0]) || config.defaultChunkSize;
                 var totalEthForBatch = args[1] ? parseFloat(args[1]) : null;
-                var delayBetweenChunks = parseInt(args[2]) || 3000;
-                await airdropBatch(parseInt(args[0]) || config.defaultChunkSize, totalEthForBatch, delayBetweenChunks);
+                var startAtAirdropBatch = args[2] ? parseInt(args[2]) : 0;
+                var endAtAirdropBatch = args[3] ? parseInt(args[3]) : null;
+                var delayBetweenChunks = parseInt(args[4]) || 3000;
+
+             
+                await airdropBatch(chunkSize, totalEthForBatch, startAtAirdropBatch, endAtAirdropBatch, delayBetweenChunks);
                 break;
                 
             case 'swap-batch':
