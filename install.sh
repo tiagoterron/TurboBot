@@ -1314,7 +1314,7 @@ case ${1:-help} in
         fi
         
         # Download and execute latest install script
-        local temp_script=$(mktemp)
+        temp_script=$(mktemp)
         if command -v wget &> /dev/null; then
             if wget -O "$temp_script" "https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/install.sh"; then
                 chmod +x "$temp_script"
