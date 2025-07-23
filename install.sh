@@ -328,6 +328,18 @@ check_server_js() {
     fi
 }
 
+check_helper_js() {
+    if [[ ! -f "$HELPER_JS" ]]; then
+        log "server.js not found. Downloading from external source..."
+        if ! download_file "$HELPER_JS_URL" "$HELPER_JS"; then
+            log "Failed to download server.js. Creating fallback version..."
+            create_helper_js
+        fi
+    else
+        log "server.js found locally"
+    fi
+}
+
 # Function to check and download index.html for Web GUI
 check_index_html() {
     if [[ ! -d "$PUBLIC_DIR" ]]; then
@@ -1241,6 +1253,7 @@ case ${1:-help} in
         check_node_script
         check_node_helper
         check_server_js
+        check_helper_js
         check_index_html
         create_env_template
         install_dependencies
