@@ -645,6 +645,262 @@ app.post('/api/wallets/create', async (req, res) => {
     }
 });
 
+// Update .env file endpoint
+app.post('/api/settings/update-env', async (req, res) => {
+    try {
+        const { rpcUrl, gasMax } = req.body;
+        
+        // Validate inputs
+        if (!rpcUrl || !gasMax) {
+            return res.status(400).json({
+                success: false,
+                error: 'RPC URL and Gas Max are required'
+            });
+        }
+        
+        const fs = require('fs');
+        const path = require('path');
+        
+        const envPath = path.join(__dirname, '.env');
+        
+        let envContent = '';
+        
+        // Read existing .env file if it exists
+        if (fs.existsSync(envPath)) {
+            envContent = fs.readFileSync(envPath, 'utf8');
+        }
+        
+        // Parse existing env content into key-value pairs
+        const envLines = envContent.split('\n');
+        const envVars = {};
+        
+        envLines.forEach(line => {
+            if (line.trim() && !line.startsWith('#')) {
+                const [key, ...valueParts] = line.split('=');
+                if (key && valueParts.length > 0) {
+                    envVars[key.trim()] = valueParts.join('=').trim();
+                }
+            }
+        });
+        
+        // Update the specific variables
+        envVars['RPC_URL'] = rpcUrl;
+        envVars['GAS_MAX'] = gasMax;
+        
+        // Rebuild the .env content
+        const updatedLines = [];
+        
+        // Add header comment
+        updatedLines.push('# TurboBot Configuration');
+        updatedLines.push('# Updated via Web Interface: ' + new Date().toISOString());
+        updatedLines.push('');
+        
+        // Add essential variables first
+        const essentialVars = ['RPC_URL', 'GAS_MAX', 'PK_MAIN'];
+        essentialVars.forEach(key => {
+            if (envVars[key] !== undefined) {
+                updatedLines.push(`${key}=${envVars[key]}`);
+                delete envVars[key]; // Remove from remaining vars
+            }
+        });
+        
+        updatedLines.push('');
+        updatedLines.push('# Other Configuration');
+        
+        // Add remaining variables
+        Object.entries(envVars).forEach(([key, value]) => {
+            updatedLines.push(`${key}=${value}`);
+        });
+        
+        // Write the updated content back to .env
+        const newEnvContent = updatedLines.join('\n');
+        fs.writeFileSync(envPath, newEnvContent, 'utf8');
+        
+        console.log('✅ .env file updated successfully');
+        console.log(`   RPC_URL: ${rpcUrl}`);
+        console.log(`   GAS_MAX: ${gasMax}`);
+        
+        res.json({
+            success: true,
+            message: '.env file updated successfully',
+            updatedVars: {
+                RPC_URL: rpcUrl,
+                GAS_MAX: gasMax
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error updating .env file:', error);
+        
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update .env file',
+            details: error.message
+        });
+    }
+});
+
+app.get('/api/settings', (req, res) => {
+    try {
+        // Return current configuration (without sensitive data)
+        const safeConfig = {
+            rpcUrl: config.rpcUrl,
+            gasMax: config.gasSettings.gasMax,
+            hasMainWallet: !!config.fundingPrivateKey,
+            defaultWalletCount: config.defaultWalletCount,
+            defaultChunkSize: config.defaultChunkSize,
+            defaultBatchSize: config.defaultBatchSize,
+            defaultV3Fee: config.defaultV3Fee
+        };
+        
+        res.json({
+            success: true,
+            settings: safeConfig
+        });
+        
+    } catch (error) {
+        console.error('Settings API error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get settings',
+            details: error.message
+        });
+    }
+});
+
+app.post('/api/settings', async (req, res) => {
+    try {
+        const { rpcUrl, gasMax } = req.body;
+        
+        // Validate inputs
+        if (!rpcUrl || typeof rpcUrl !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'Valid RPC URL is required'
+            });
+        }
+        
+        if (!gasMax || isNaN(parseFloat(gasMax)) || parseFloat(gasMax) <= 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Valid Gas Max value is required'
+            });
+        }
+        
+        // Validate RPC URL format
+        try {
+            new URL(rpcUrl);
+        } catch (urlError) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid RPC URL format'
+            });
+        }
+        
+        // Update configuration
+        config.rpcUrl = rpcUrl;
+        config.gasSettings.gasMax = gasMax;
+        
+        // Update the provider with new RPC URL
+        const { ethers } = require('ethers');
+        const newProvider = new ethers.providers.JsonRpcProvider(rpcUrl);
+        
+        // Test the new provider
+        try {
+            await newProvider.getNetwork();
+            console.log(`✅ Settings updated - RPC: ${rpcUrl}, Gas Max: ${gasMax} ETH`);
+        } catch (providerError) {
+            console.warn(`⚠️ Settings updated but provider test failed: ${providerError.message}`);
+        }
+        
+        res.json({
+            success: true,
+            message: 'Settings updated successfully',
+            settings: {
+                rpcUrl: config.rpcUrl,
+                gasMax: config.gasSettings.gasMax
+            }
+        });
+        
+    } catch (error) {
+        console.error('Settings update error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update settings',
+            details: error.message
+        });
+    }
+});
+
+app.post('/api/settings/test-rpc', async (req, res) => {
+    try {
+        const { rpcUrl } = req.body;
+        
+        if (!rpcUrl) {
+            return res.status(400).json({
+                success: false,
+                error: 'RPC URL is required'
+            });
+        }
+        
+        // Validate URL format
+        try {
+            new URL(rpcUrl);
+        } catch (urlError) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid RPC URL format'
+            });
+        }
+        
+        // Test connection
+        const { ethers } = require('ethers');
+        const testProvider = new ethers.providers.JsonRpcProvider(rpcUrl);
+        
+        // Get network info with timeout
+        const networkPromise = testProvider.getNetwork();
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Connection timeout')), 10000)
+        );
+        
+        const network = await Promise.race([networkPromise, timeoutPromise]);
+        
+        // Get additional network info
+        let blockNumber;
+        try {
+            blockNumber = await testProvider.getBlockNumber();
+        } catch (blockError) {
+            blockNumber = null;
+        }
+        
+        const networkInfo = {
+            name: network.name,
+            chainId: network.chainId,
+            blockNumber: blockNumber
+        };
+        
+        res.json({
+            success: true,
+            message: 'RPC connection successful',
+            networkInfo: networkInfo
+        });
+        
+    } catch (error) {
+        console.error('RPC test error:', error);
+        
+        let errorMessage = error.message;
+        if (error.code === 'NETWORK_ERROR') {
+            errorMessage = 'Network connection failed - check URL and internet connection';
+        } else if (error.code === 'SERVER_ERROR') {
+            errorMessage = 'RPC server error - the endpoint may be down or invalid';
+        }
+        
+        res.json({
+            success: false,
+            error: errorMessage
+        });
+    }
+});
 
 
 app.post('/api/contract/find-address', async (req, res) => {
