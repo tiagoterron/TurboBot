@@ -17,7 +17,7 @@ LOG_FILE="$SCRIPT_DIR/automation.log"
 # External files configuration
 TIMESTAMP=$(date +%s)
 SCRIPT_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js?cache_bust=$TIMESTAMP"
-HELPER_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js?cache_bust=$TIMESTAMP"
+HELPER_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/helper.js?cache_bust=$TIMESTAMP"
 PACKAGE_JSON_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/package.json?cache_bust=$TIMESTAMP"
 SERVER_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/server.js?cache_bust=$TIMESTAMP"
 INDEX_HTML_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/public/index.html?cache_bust=$TIMESTAMP"
