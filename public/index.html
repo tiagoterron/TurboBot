@@ -835,11 +835,21 @@ input[type="radio"][value="no"]:checked {
                     <span>Use this button to immediately terminate all running processes and automation.</span>
                 </div>
             </div>
-            <button onclick="killAllProcesses()" 
+            <button onclick="killAllProcesses(true)" 
                     class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg">
                 💀 KILL ALL PROCESSES
             </button>
         </div>
+
+        <div class="fixed bottom-6 right-6 z-50">
+    <div class="relative group">
+        <!-- Emergency Button -->
+        <button onclick="killAllProcesses(false)" 
+                class="w-16 h-16 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-2xl transition-all duration-300 transform hover:scale-110 hover:shadow-red-500/50 flex items-center justify-center text-2xl border-2 border-red-500 hover:border-red-400">
+            💀
+        </button>
+    </div>
+</div>
 
         <!-- Terminal Output -->
         <div class="glass rounded-xl p-6">
@@ -2389,12 +2399,14 @@ function parseOutputForStats(output) {
 }
 
 // Emergency functions
-async function killAllProcesses() {
+async function killAllProcesses(param) {
     const button = event.target;
     
     logToTerminal('🚨 EMERGENCY: Killing all processes...', 'error');
-    button.disabled = true;
-    button.innerHTML = '💀 KILLING...';
+    if(param){
+        button.disabled = true;
+        button.innerHTML = '💀 KILLING...';
+    }
     
     try {
         const response = await fetch('/api/force-kill', {
