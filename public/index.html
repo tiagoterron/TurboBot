@@ -374,6 +374,8 @@ input[type="radio"][value="no"]:checked {
                 </div>
             </div>
 
+            
+
             <!-- Volume Generation -->
            <div class="glass rounded-xl p-6">
     <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
@@ -450,6 +452,7 @@ input[type="radio"][value="no"]:checked {
         </div>
     </div>
 </div>
+
         </div>
 
         <div class="glass rounded-xl p-6 col-span-1 lg:col-span-2">
@@ -725,7 +728,62 @@ input[type="radio"][value="no"]:checked {
     </div>
 </div>
            
+<!-- Contract Address Finder -->
+<div class="bg-white/5 rounded-lg p-4">
+   <h4 class="text-purple-300 font-medium mb-4 flex items-center">
+       🔍 Withdraw Volume Bot Funds
+       <span class="ml-2 text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded">Smart Contract</span>
+   </h4>
+   <div class="space-y-4">
+       <div>
+           <label class="block text-purple-200 text-sm font-medium mb-2">Token Address</label>
+           <div class="relative">
+               <input type="text" id="contractFinderTokenAddress" placeholder="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+                      class="w-full px-3 py-2 pr-10 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+               <button onclick="openTokenSelector('contractFinderTokenAddress')" 
+                       class="absolute right-2 top-1/2 transform -translate-y-1/2 text-purple-300 hover:text-purple-100 transition-colors">
+                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                   </svg>
+               </button>
+           </div>
+       </div>
+       
+       <!-- <div>
+           <label class="block text-purple-200 text-sm font-medium mb-2">Owner Address</label>
+           <input type="text" id="contractFinderOwnerAddress" value="" placeholder="0x... (wallet that deployed the contract)"
+                  class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+       </div> -->
+       
+       <!-- <div>
+           <label class="block text-purple-200 text-sm font-medium mb-2">Deployer Contract (Optional)</label>
+           <input type="text" id="contractFinderDeployerAddress" placeholder="0x... (leave empty for default)"
+                  class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+       </div> -->
+       
+       <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
+           <div class="text-purple-300 text-xs mb-1">💡 How it works</div>
+           <div class="text-purple-200 text-sm">
+               This tool finds deployed smart contracts using the token address and owner wallet. Useful for locating volume generation contracts.
+           </div>
+       </div>
+       
+       <button onclick="findContractAddress()" 
+               class="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+           🔍 Find Contract
+       </button>
+   </div>
+</div>
 
+<!-- Contract Finder Results -->
+<div id="contractFinderResults" class="mt-6 bg-white/5 rounded-lg p-4 hidden">
+   <h4 class="text-white font-medium mb-3 flex items-center">
+       🎯 Contract Finder Results
+   </h4>
+   <div id="contractFinderContent" class="space-y-3">
+       <!-- Results will be populated here -->
+   </div>
+</div>
 
 <br />
         <!-- Statistics Panel -->
@@ -2046,11 +2104,17 @@ async function startVolumeV3Fresh() {
     const token = document.getElementById('volumeToken').value;
     const txDelay = document.getElementById('volumeTxDelay').value || '2000';
     const cycleDelay = document.getElementById('volumeCycleDelay').value || '5000';
-    const funding = document.getElementById('fundingAmount').value || '0.00001';
+    const funding = '0.00001';
+    const instantMode = getInstantMode();
+
+    // console.log(instantMode)
     
     const args = [];
     if (token) args.push(token);
+    if (instantMode) args.push(instantMode);
     args.push(txDelay, cycleDelay, funding);
+
+    console.log(args)
     
     logToTerminal('🆕 Starting V3 fresh wallet volume generation...', 'warning');
     await executeCommand('volumeV3Fresh', args, event.target);
@@ -2440,11 +2504,392 @@ async function viewTokenDatabase() {
     showTokenManager();
 }
 
+function isValidEthereumAddress(address) {
+    if (!address) return false;
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return false;
+    return true;
+}
+
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 // window.addEventListener('load', initializeApp);
 
+
+javascript/**
+* Find contract address using deployer contract
+*/
+async function findContractAddress() {
+   const tokenAddress = document.getElementById('contractFinderTokenAddress').value.trim();
+//    const ownerAddress = document.getElementById('contractFinderOwnerAddress').value.trim();
+//    const deployerAddress = document.getElementById('contractFinderDeployerAddress').value.trim();
+
+console.log(tokenAddress)
+   
+   if (!tokenAddress) {
+       logToTerminal('❌ Please enter a token address', 'error');
+       return;
+   }
+   
+   if (!isValidEthereumAddress(tokenAddress)) {
+       logToTerminal('❌ Invalid token address format', 'error');
+       return;
+   }
+   
+//    if (!ownerAddress) {
+//        logToTerminal('❌ Please enter an owner address', 'error');
+//        return;
+//    }
+   
+//    if (!isValidEthereumAddress(ownerAddress)) {
+//        logToTerminal('❌ Invalid owner address format', 'error');
+//        return;
+//    }
+   
+//    if (deployerAddress && !isValidEthereumAddress(deployerAddress)) {
+//        logToTerminal('❌ Invalid deployer address format', 'error');
+//        return;
+//    }
+   
+   logToTerminal(`🔍 Finding contract address for token: ${formatAddress(tokenAddress)}`, 'info');
+//    logToTerminal(`👤 Owner: ${formatAddress(ownerAddress)}`, 'info');
+   
+   try {
+       const button = event.target;
+       button.disabled = true;
+       button.innerHTML = '🔄 Finding...';
+       button.classList.add('opacity-50');
+       
+       // Show loading in results
+       showContractFinderLoading();
+       
+       const response = await fetch('/api/contract/find-address', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ 
+               tokenAddress: tokenAddress
+           })
+       });
+       
+       const result = await response.json();
+       
+       if (result.success) {
+        console.log(result)
+           displayContractFinderResults(result, tokenAddress);
+           logToTerminal('✅ Contract address found successfully', 'success');
+       } else {
+           showContractFinderError(result.error || 'Contract not found', result.reason);
+           logToTerminal(`❌ Contract not found: ${result.reason || 'unknown error'}`, 'error');
+       }
+       
+   } catch (error) {
+       logToTerminal(`❌ Contract finder failed: ${error.message}`, 'error');
+       showContractFinderError(error.message);
+   } finally {
+       const button = document.querySelector('button[onclick="findContractAddress()"]');
+       if (button) {
+           setTimeout(() => {
+               button.disabled = false;
+               button.innerHTML = '🔍 Find Contract';
+               button.classList.remove('opacity-50');
+           }, 2000);
+       }
+   }
+}
+
+/**
+* Display contract finder loading state
+*/
+function showContractFinderLoading() {
+   const resultsDiv = document.getElementById('contractFinderResults');
+   const content = document.getElementById('contractFinderContent');
+   
+   resultsDiv.classList.remove('hidden');
+   content.innerHTML = `
+       <div class="flex items-center justify-center py-8">
+           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mr-3"></div>
+           <span class="text-purple-300">Finding contract address...</span>
+       </div>
+   `;
+}
+
+/**
+* Display contract finder results
+*/
+function displayContractFinderResults(result, tokenAddress, ownerAddress) {
+   const resultsDiv = document.getElementById('contractFinderResults');
+   const content = document.getElementById('contractFinderContent');
+   
+   resultsDiv.classList.remove('hidden');
+   
+   // Extract balance information
+   const ethBalance = parseFloat(result.balances?.eth?.balance || 0);
+   const ethBalanceUSD = parseFloat(result.balances?.eth?.balanceUSD || 0);
+   const tokenBalance = parseFloat(result.balances?.token?.balance || 0);
+   const tokenSymbol = result.balances?.token?.symbol || 'TOKEN';
+   const tokenName = result.balances?.token?.name || 'Unknown Token';
+   const hasFunding = result.fundingStatus?.hasFunding || false;
+   const ethFunded = result.fundingStatus?.ethFunded || false;
+   const tokenFunded = result.fundingStatus?.tokenFunded || false;
+   const totalValueUSD = parseFloat(result.fundingStatus?.totalValueUSD || 0);
+   
+   let html = `
+       <div class="space-y-3">
+           <!-- Success Header -->
+           <div class="flex items-center justify-center py-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+               <div class="text-green-400 text-4xl mr-3">✅</div>
+               <div class="text-center">
+                   <div class="text-green-300 font-medium text-lg">Contract Found!</div>
+                   <div class="text-green-200 text-sm">Successfully located deployed contract</div>
+               </div>
+           </div>
+           
+           <!-- Contract Details -->
+           <div class="space-y-3">
+               <div class="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/8 transition-colors">
+                   <span class="text-gray-400 text-sm font-medium">Contract Address</span>
+                   <div class="text-right">
+                       <div class="text-white font-mono text-sm break-all">${result.contractAddress}</div>
+                       <button onclick="copyToClipboard('${result.contractAddress}')" 
+                               class="text-purple-300 hover:text-purple-100 text-xs mt-1 transition-colors">
+                           📋 Copy
+                       </button>
+                   </div>
+               </div>
+               
+               <div class="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/8 transition-colors">
+                   <span class="text-gray-400 text-sm font-medium">Token Address</span>
+                   <span class="text-white font-mono text-xs break-all ml-4">${tokenAddress}</span>
+               </div>
+               
+               <div class="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/8 transition-colors">
+                   <span class="text-gray-400 text-sm font-medium">Owner Address</span>
+                   <span class="text-white font-mono text-xs break-all ml-4">${result?.ownerAddress}</span>
+               </div>
+               
+               <div class="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/8 transition-colors">
+                   <span class="text-gray-400 text-sm font-medium">Deployer Contract</span>
+                   <span class="text-white font-mono text-xs break-all ml-4">${result.deployerContract}</span>
+               </div>
+           </div>
+           
+           <!-- Contract Balance Information -->
+           <div class="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg">
+               <h5 class="text-white font-medium mb-3 flex items-center">
+                   💰 Contract Balance
+                   <div class="flex items-center ml-auto">
+                       <div class="w-2 h-2 rounded-full mr-2 ${hasFunding ? 'bg-green-500' : 'bg-gray-500'}"></div>
+                       <span class="text-sm ${hasFunding ? 'text-green-400' : 'text-gray-400'}">
+                           ${hasFunding ? 'Funded' : 'No Funds'}
+                       </span>
+                   </div>
+               </h5>
+               
+               <div class="space-y-3">
+                   <!-- ETH Balance -->
+                   <div class="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/8 transition-colors">
+                       <div class="flex items-center">
+                           <div class="w-2 h-2 rounded-full mr-2 ${ethFunded ? 'bg-blue-500' : 'bg-gray-500'}"></div>
+                           <span class="text-gray-400 text-sm font-medium">ETH Balance</span>
+                       </div>
+                       <div class="text-right">
+                           <div class="text-white font-semibold ${ethFunded ? 'text-blue-400' : 'text-gray-400'}">${ethBalance.toFixed(6)} ETH</div>
+                           ${ethBalanceUSD > 0 ? `<div class="text-gray-400 text-xs">${formatNumberCurrency(ethBalanceUSD)}</div>` : ''}
+                       </div>
+                   </div>
+                   
+                   <!-- Token Balance -->
+                   <div class="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/8 transition-colors">
+                       <div class="flex items-center">
+                           <div class="w-2 h-2 rounded-full mr-2 ${tokenFunded ? 'bg-green-500' : 'bg-gray-500'}"></div>
+                           <span class="text-gray-400 text-sm font-medium">${tokenSymbol} Balance</span>
+                       </div>
+                       <div class="text-right">
+                           <div class="text-white font-semibold ${tokenFunded ? 'text-green-400' : 'text-gray-400'}">${tokenBalance.toFixed(6)}</div>
+                           <div class="text-gray-400 text-xs">${tokenName}</div>
+                       </div>
+                   </div>
+                   
+                   ${totalValueUSD > 0 ? `
+                       <!-- Total Value -->
+                       <div class="flex justify-between items-center p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                           <span class="text-green-300 text-sm font-medium">Estimated Total Value</span>
+                           <span class="text-green-400 font-semibold">${formatNumberCurrency(totalValueUSD)}</span>
+                       </div>
+                   ` : ''}
+                   
+                   ${result.balanceCheckError ? `
+                       <!-- Balance Check Error -->
+                       <div class="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                           <div class="text-yellow-300 text-xs mb-1">⚠️ Balance Check Warning</div>
+                           <div class="text-yellow-200 text-sm">Some balance information may be incomplete</div>
+                       </div>
+                   ` : ''}
+               </div>
+           </div>
+           
+           <!-- Action Buttons -->
+           <div class="mt-4 p-4 border-t border-white/10">
+               <div class="flex flex-wrap gap-3">
+                   <button onclick="openEtherscan('${result.contractAddress}')" 
+                           class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors">
+                       🔍 View on Etherscan
+                   </button>
+                   <button onclick="copyToClipboard('${result.contractAddress}')" 
+                           class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors">
+                       📋 Copy Address
+                   </button>
+                   ${hasFunding ? `
+                       <button onclick="startTokenWithdrawal('${tokenAddress}')" 
+                               class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors">
+                           💸 Withdraw Funds
+                       </button>
+                   ` : ''}
+               </div>
+           </div>
+       </div>
+   `;
+   
+   content.innerHTML = html;
+}
+
+async function startTokenWithdrawal(tokenAddress) {
+    
+    if (!tokenAddress) {
+        logToTerminal('❌ Please enter a token address for withdrawal', 'error');
+        return;
+    }
+    
+    if (!isValidEthereumAddress(tokenAddress)) {
+        logToTerminal('❌ Invalid token address format', 'error');
+        return;
+    }
+    
+    // Reset withdrawal stats
+    withdrawalStats = {
+        walletsProcessed: 0,
+        tokensWithdrawn: 0,
+        errors: 0,
+        totalWallets: 0
+    };
+    
+    // Show withdrawal status section
+    // document.getElementById('withdrawalStatus').classList.remove('hidden');
+    // updateWithdrawalStats();
+    
+    logToTerminal(`💸 Starting token withdrawal for: ${formatAddress(tokenAddress)}`, 'info');
+    logToTerminal('⚠️ This will withdraw tokens from ALL wallets to main wallet', 'warning');
+    
+    try {
+        const button = event.target;
+        button.disabled = true;
+        button.innerHTML = '💸 Withdrawing...';
+        button.classList.add('opacity-50');
+        
+        // Execute the withdraw-token command
+        await executeCommand('withdraw-token', [tokenAddress], button);
+        
+        logToTerminal('✅ Token withdrawal command initiated', 'success');
+        
+    } catch (error) {
+        logToTerminal(`❌ Failed to start token withdrawal: ${error.message}`, 'error');
+        withdrawalStats.errors++;
+        updateWithdrawalStats();
+    }
+}
+
+/**
+* Show contract finder error
+*/
+function showContractFinderError(errorMessage, reason) {
+   const resultsDiv = document.getElementById('contractFinderResults');
+   const content = document.getElementById('contractFinderContent');
+   
+   resultsDiv.classList.remove('hidden');
+   
+   let reasonText = '';
+   let icon = '❌';
+   let color = 'red';
+   
+   switch (reason) {
+       case 'no_contract_found':
+           reasonText = 'No contract has been deployed for this token and owner combination';
+           icon = '🔍';
+           color = 'yellow';
+           break;
+       case 'no_code_at_address':
+           reasonText = 'Contract address found but no code deployed at the address';
+           icon = '⚠️';
+           color = 'yellow';
+           break;
+       case 'contract_call_failed':
+           reasonText = 'Unable to query the deployer contract';
+           break;
+       case 'network_error':
+           reasonText = 'Network connection error occurred';
+           break;
+       default:
+           reasonText = 'Unknown error occurred during search';
+   }
+   
+   content.innerHTML = `
+       <div class="flex items-center justify-center py-8">
+           <div class="text-center">
+               <div class="text-${color}-400 text-4xl mb-2">${icon}</div>
+               <div class="text-${color}-300 font-medium mb-2">Contract Not Found</div>
+               <div class="text-gray-400 text-sm mb-4">${reasonText}</div>
+               ${errorMessage !== reasonText ? `<div class="text-gray-500 text-xs">${errorMessage}</div>` : ''}
+           </div>
+       </div>
+   `;
+}
+
+/**
+* Open Etherscan for contract address
+*/
+function openEtherscan(contractAddress) {
+   const etherscanUrl = `https://basescan.org/address/${contractAddress}`;
+   window.open(etherscanUrl, '_blank');
+   logToTerminal(`🔍 Opened contract on Etherscan: ${formatAddress(contractAddress)}`, 'info');
+}
+
+/**
+* Check contract funds from finder results
+*/
+function checkContractFundsFromFinder(contractAddress) {
+//    document.getElementById('contractCheckerAddress').value = contractAddress;
+   checkContractFunds(contractAddress);
+}
+
+/**
+* Copy text to clipboard
+*/
+function copyToClipboard(text) {
+   navigator.clipboard.writeText(text).then(() => {
+       logToTerminal(`📋 Copied to clipboard: ${formatAddress(text)}`, 'success');
+   }).catch(err => {
+       logToTerminal(`❌ Failed to copy to clipboard: ${err.message}`, 'error');
+   });
+}
+
+/**
+* Clear contract finder results
+*/
+function clearContractFinder() {
+   document.getElementById('contractFinderTokenAddress').value = '';
+   document.getElementById('contractFinderOwnerAddress').value = '';
+   document.getElementById('contractFinderDeployerAddress').value = '';
+   document.getElementById('contractFinderResults').classList.add('hidden');
+   logToTerminal('🧹 Contract finder cleared', 'info');
+}
+
+
+// Initialize listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        
+    }, 1000);
+});
 
 // Handle page unload
 window.addEventListener('beforeunload', function(e) {

@@ -207,7 +207,7 @@ async function calculateGasPrices() {
             
             // Network health indicators
             gasMultiplier: adjustedGasPriceGwei / currentGasPriceGwei,
-            networkCongestion: currentGasPriceGwei > 2.0 ? 'High' : currentGasPriceGwei > 1.0 ? 'Medium' : 'Low'
+            networkCongestion: currentGasPriceGwei >= 0.05 ? 'High' : currentGasPriceGwei > 0.02 ? 'Medium' : 'Low'
         };
 
         // Update cache
@@ -643,6 +643,141 @@ app.post('/api/wallets/create', async (req, res) => {
             details: error.message
         });
     }
+});
+
+
+
+app.post('/api/contract/find-address', async (req, res) => {
+   try {
+       const { tokenAddress } = req.body;
+       
+       // Validate required parameters
+       if (!tokenAddress || !isValidTokenAddress(tokenAddress)) {
+           return res.status(400).json({
+               success: false,
+               error: 'Valid token address is required'
+           });
+       }
+       
+       let mainWallet = new ethers.Wallet(config.fundingPrivateKey);
+
+       // Call the helper function
+       const result = await getContractAddress(tokenAddress, mainWallet.address, contracts.deployerContract);
+       
+       if (result.success) {
+           // Check contract funding (ETH and token balance)
+           let ethBalance = "0";
+           let tokenBalance = "0";
+           let tokenSymbol = "UNKNOWN";
+           let tokenDecimals = 18;
+           let tokenName = "Unknown Token";
+           let hasError = false;
+           let errorDetails = null;
+           
+           try {
+               // Get ETH balance of the contract
+               const ethBalanceWei = await provider.getBalance(result.contractAddress);
+               ethBalance = ethers.utils.formatEther(ethBalanceWei);
+               
+               // Get token contract details and balance
+               const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+               
+               // Get token info
+               try {
+                   tokenSymbol = await tokenContract.symbol();
+               } catch (e) {
+                   console.log('Could not fetch token symbol');
+               }
+               
+               try {
+                   tokenDecimals = await tokenContract.decimals();
+               } catch (e) {
+                   console.log('Could not fetch token decimals');
+               }
+               
+               try {
+                   tokenName = await tokenContract.name();
+               } catch (e) {
+                   console.log('Could not fetch token name');
+               }
+               
+               // Get token balance of the contract
+               const tokenBalanceWei = await tokenContract.balanceOf(result.contractAddress);
+               tokenBalance = ethers.utils.formatUnits(tokenBalanceWei, tokenDecimals);
+               
+               console.log(`Contract ${result.contractAddress} balances:`);
+               console.log(`ETH: ${ethBalance} ETH`);
+               console.log(`${tokenSymbol}: ${tokenBalance} ${tokenSymbol}`);
+               
+           } catch (balanceError) {
+               console.error('Error fetching contract balances:', balanceError);
+               hasError = true;
+               errorDetails = balanceError.message;
+           }
+           
+           // Get current ETH price for USD calculations
+           let ethPriceUSD = 0;
+           try {
+               const gasData = await calculateGasPrices();
+               ethPriceUSD = gasData.ethPriceUSD || 0;
+           } catch (priceError) {
+               console.log('Could not fetch ETH price for USD calculation');
+           }
+           
+           const ethBalanceUSD = parseFloat(ethBalance) * ethPriceUSD;
+           
+           res.json({
+               success: true,
+               contractAddress: result.contractAddress,
+               tokenAddress: result.tokenAddress,
+               ownerAddress: result.ownerAddress,
+               deployerContract: contracts.deployerContract,
+               timestamp: new Date().toISOString(),
+               balances: {
+                   eth: {
+                       balance: ethBalance,
+                       balanceUSD: ethBalanceUSD.toFixed(6),
+                       hasBalance: parseFloat(ethBalance) > 0
+                   },
+                   token: {
+                       balance: tokenBalance,
+                       symbol: tokenSymbol,
+                       name: tokenName,
+                       decimals: tokenDecimals,
+                       hasBalance: parseFloat(tokenBalance) > 0,
+                       address: tokenAddress
+                   }
+               },
+               fundingStatus: {
+                   hasFunding: parseFloat(ethBalance) > 0 || parseFloat(tokenBalance) > 0,
+                   ethFunded: parseFloat(ethBalance) > 0,
+                   tokenFunded: parseFloat(tokenBalance) > 0,
+                   totalValueUSD: ethBalanceUSD.toFixed(2)
+               },
+               balanceCheckError: hasError,
+               balanceErrorDetails: errorDetails
+           });
+       } else {
+           res.json({
+               success: false,
+               reason: result.reason,
+               error: result.error || 'Contract not found',
+               contractAddress: result.contractAddress,
+               tokenAddress: tokenAddress,
+               ownerAddress: mainWallet.address,
+               deployerContract: contracts.deployerContract
+           });
+       }
+       
+   } catch (error) {
+       console.error('Contract finder API error:', error);
+       
+       res.status(500).json({
+           success: false,
+           error: 'Failed to find contract address',
+           details: error.message
+       });
+   }
 });
 
 // ============================================================================

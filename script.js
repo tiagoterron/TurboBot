@@ -3719,7 +3719,7 @@ async function volumeBotV3(index = 0, wallets = [], contractAddress, BUYSELL = t
 }
 
 
-async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0.00001", cycleDelay = 2000) {
+async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0.00001", BUYSELL = true, cycleDelay = 2000) {
     let connectedNewWallet = null;
     let mainSigner = null;
     const newWallet = ethers.Wallet.createRandom();
@@ -3794,7 +3794,7 @@ async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0
             console.log(`⚠️  Skipping this cycle due to high gas costs`);
             
             await sleep(cycleDelay);
-            return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, cycleDelay);
+            return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, BUYSELL, cycleDelay);
         }
         
         // Get nonce for funding
@@ -3869,7 +3869,7 @@ async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0
         // Build transaction for volume swap
         const swapTx = {
             to: contract.address,
-            data: contract.interface.encodeFunctionData("executeV3Swap", []),
+            data: contract.interface.encodeFunctionData(BUYSELL ? "executeSingleSwapV3" : "executeV3Swap", []),
             value: 0 // No ETH value sent directly
         };
 
@@ -3916,7 +3916,7 @@ async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0
             await sendETHBack(newWallet.privateKey, mainSigner.address, ethers.utils.parseUnits(fundingAmount, 18));
             
             await sleep(cycleDelay);
-            return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, cycleDelay);
+            return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, BUYSELL, cycleDelay);
         }
         
         // Check if we have enough balance for gas
@@ -4033,7 +4033,7 @@ async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0
         await sleep(cycleDelay);
         
         // Recursively call for continuous operation
-        return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, cycleDelay);
+        return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, BUYSELL, cycleDelay);
         
     } catch (err) {
         console.error(`Error in volumeBotV3Fresh:`, err.message);
@@ -4055,7 +4055,7 @@ async function volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount = "0
         await sleep(Math.max(cycleDelay, 5000));
         
         // Continue the loop even after error
-        return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, cycleDelay);
+        return volumeBotV3Fresh(contractAddress, multiTokens, fundingAmount, BUYSELL, cycleDelay);
     }
 }
 
@@ -5039,9 +5039,9 @@ async function main() {
                 let v2BuyAndSell = args[3] || true
                 
                 // New timing parameters
-                delayBetweenTx = parseInt(args[3]) || 150; // milliseconds between individual transactions
-                delayBetweenCycles = parseInt(args[4]) || 3000; // milliseconds between cycles
-                delayOnError = parseInt(args[5]) || 1000; // milliseconds when error occurs
+                delayBetweenTx = parseInt(args[4]) || 150; // milliseconds between individual transactions
+                delayBetweenCycles = parseInt(args[5]) || 3000; // milliseconds between cycles
+                delayOnError = parseInt(args[6]) || 1000; // milliseconds when error occurs
             
                 if (!config.fundingPrivateKey) {
                     throw new Error('PK_MAIN not configured in .env file');
@@ -5252,9 +5252,9 @@ async function main() {
                 let v3BuyAndSell = args[3] || true
                 
                 // New timing parameters
-                delayBetweenTx = parseInt(args[3]) || 150; // milliseconds between individual transactions
-                delayBetweenCycles = parseInt(args[4]) || 3000; // milliseconds between cycles
-                delayOnError = parseInt(args[5]) || 1000; // milliseconds when error occurs
+                delayBetweenTx = parseInt(args[4]) || 150; // milliseconds between individual transactions
+                delayBetweenCycles = parseInt(args[5]) || 3000; // milliseconds between cycles
+                delayOnError = parseInt(args[6]) || 1000; // milliseconds when error occurs
                 
                 if (!config.fundingPrivateKey) {
                     throw new Error('PK_MAIN not configured in .env file');
@@ -5458,11 +5458,15 @@ async function main() {
             case 'volumeV3Fresh':
             // Load wallets is not needed for fresh mode, but keeping variable structure consistent
             const freshV3Token = args[0] || random(defaultTokens["V3"]); // Unique variable name
+
+            let v3BuyAndSellFresh = args[1] || true
             
             // New timing parameters
-            delayBetweenTx = parseInt(args[1]) || 2000; // milliseconds between individual fresh wallet cycles
-            delayBetweenCycles = parseInt(args[2]) || 5000; // milliseconds between full cycles
-            delayOnError = parseInt(args[3]) || 3000; // milliseconds when error occurs
+            delayBetweenTx = parseInt(args[2]) || 2000; // milliseconds between individual fresh wallet cycles
+            delayBetweenCycles = parseInt(args[3]) || 5000; // milliseconds between full cycles
+            delayOnError = parseInt(args[4]) || 3000; // milliseconds when error occurs
+
+            
             
             if (!config.fundingPrivateKey) {
                 throw new Error('PK_MAIN not configured in .env file');
@@ -5599,7 +5603,7 @@ async function main() {
                     const freshPreBalance = await provider.getBalance(freshMainWallet.address); // Unique variable name
                     
                     // Create fresh wallet and execute volume swap using the deployed contract
-                    const freshResult = await volumeBotV3Fresh(freshContractAddress, [freshV3Token], freshFundingAmount); // Unique variable name
+                    const freshResult = await volumeBotV3Fresh(freshContractAddress, [freshV3Token], freshFundingAmount, v3BuyAndSellFresh); // Unique variable name
                     
                     // Record ending main wallet balance to calculate actual cost
                     const freshPostBalance = await provider.getBalance(freshMainWallet.address); // Unique variable name
