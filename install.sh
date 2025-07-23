@@ -6,7 +6,7 @@
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_JS="$SCRIPT_DIR/script.js"
-HELPER_JS="$SCRIPT_DIR/script.js"
+HELPER_JS="$SCRIPT_DIR/helper.js"
 PACKAGE_JSON="$SCRIPT_DIR/package.json"
 SERVER_JS="$SCRIPT_DIR/server.js"
 PUBLIC_DIR="$SCRIPT_DIR/public"
