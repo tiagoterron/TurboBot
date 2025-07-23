@@ -290,6 +290,7 @@ check_node_script() {
     fi
 }
 
+# Function to check and download helper.js
 check_node_helper() {
     if [[ ! -f "$HELPER_JS" ]]; then
         warning_log "helper.js not found locally. Downloading from external source..."
@@ -921,6 +922,10 @@ update_external_scripts() {
         update_success=false
     fi
     
+    if ! update_file "$HELPER_JS_URL" "$HELPER_JS" "helper.js"; then
+        update_success=false
+    fi
+    
     if ! update_file "$PACKAGE_JSON_URL" "$PACKAGE_JSON" "package.json"; then
         update_success=false
     else
@@ -938,7 +943,7 @@ update_external_scripts() {
     # Cleanup
     if [[ "$update_success" == "true" ]]; then
         log "✅ Core scripts updated successfully"
-        rm -f "$SCRIPT_JS.backup" "$PACKAGE_JSON.backup" "$SERVER_JS.backup" "$INDEX_HTML.backup"
+        rm -f "$SCRIPT_JS.backup" "$PACKAGE_JSON.backup" "$SERVER_JS.backup" "$HELPER_JS.backup" "$INDEX_HTML.backup"
     else
         error_log "❌ Some core updates failed. Backup files preserved for recovery."
         return 1
@@ -959,6 +964,18 @@ validate_scripts() {
         fi
     else
         error_log "❌ script.js not found"
+        validation_success=false
+    fi
+    
+    if [[ -f "$HELPER_JS" ]]; then
+        if node -c "$HELPER_JS" 2>/dev/null; then
+            log "✅ helper.js syntax is valid"
+        else
+            error_log "❌ helper.js has syntax errors"
+            validation_success=false
+        fi
+    else
+        error_log "❌ helper.js not found"
         validation_success=false
     fi
     
@@ -1052,6 +1069,12 @@ check_system_status() {
         echo -e "${GREEN}✅ script.js: Found${NC}"
     else
         echo -e "${RED}❌ script.js: Missing${NC}"
+    fi
+    
+    if [[ -f "$HELPER_JS" ]]; then
+        echo -e "${GREEN}✅ helper.js: Found${NC}"
+    else
+        echo -e "${RED}❌ helper.js: Missing${NC}"
     fi
     
     if [[ -f "$PACKAGE_JSON" ]]; then
@@ -1211,6 +1234,7 @@ show_help() {
     echo ""
     echo -e "${PURPLE}External Files:${NC}"
     echo "  script.js:     $SCRIPT_JS_URL"
+    echo "  helper.js:     $HELPER_JS_URL"
     echo "  package.json:  $PACKAGE_JSON_URL"
     echo "  server.js:     $SERVER_JS_URL"
     echo "  index.html:    $INDEX_HTML_URL"
@@ -1240,7 +1264,7 @@ case ${1:-help} in
         check_package_json
         check_node_script
         check_node_helper
-        check_server_js  
+        check_server_js
         check_index_html
         create_env_template
         install_dependencies
