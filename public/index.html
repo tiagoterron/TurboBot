@@ -2070,8 +2070,10 @@ async function startVolumeV2() {
     
     const args = [start, end];
     if (token) args.push(token);
-    if (instantMode) args.push(instantMode);
+    args.push(instantMode);
     args.push(txDelay, cycleDelay, '1000');
+
+    console.log(args)
 
 
 
@@ -2089,12 +2091,11 @@ async function startVolumeV3() {
 
     const args = [start, end];
     if (token) args.push(token);
-    if (instantMode) args.push(instantMode);
+    args.push(instantMode);
     args.push(txDelay, cycleDelay, '1000');
 
+
     console.log(args)
-
-
 
     logToTerminal('⚡ Starting V3 volume generation...', 'warning');
     await executeCommand('volumeV3', args, event.target);
@@ -2486,7 +2487,7 @@ const formatNumbeCompact = (value) => {
 
   function getInstantMode() {
     const instantModeYes = document.getElementById('instantModeYes');
-    return instantModeYes.checked;
+    return String(instantModeYes.checked);
 }
 
 

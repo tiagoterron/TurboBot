@@ -3311,6 +3311,7 @@ async function volumeBotV2(index = 0, wallets, contractAddress, BUYSELL = true) 
         
         const signer = new ethers.Wallet(wallets[index][1], provider);
         console.log(`Wallet ${index}: ${signer.address}`);
+        console.log(`Function: ${BUYSELL ? "executeSingleSwapV3" : "executeV3Swap"}`)
 
         // Check wallet balance first
         const balance = await provider.getBalance(signer.address);
@@ -3519,6 +3520,7 @@ async function volumeBotV3(index = 0, wallets = [], contractAddress, BUYSELL = t
         
         const signer = new ethers.Wallet(wallets[index][1], provider);
         console.log(`Wallet ${index}: ${signer.address}`);
+        console.log(`Function: ${BUYSELL ? "executeSingleSwapV3" : "executeV3Swap"}`)
 
         // Check wallet balance first
         const balance = await provider.getBalance(signer.address);
@@ -5036,7 +5038,7 @@ async function main() {
                 startAt = parseInt(args[0]) || 0;
                 endAt = parseInt(args[1]) || wallets.length;
                 tokenAddress = args[2] || random(defaultTokens["V2"]);
-                let v2BuyAndSell = args[3] || true
+                let v2BuyAndSell = args[3] === "true";
                 
                 // New timing parameters
                 delayBetweenTx = parseInt(args[4]) || 150; // milliseconds between individual transactions
@@ -5249,7 +5251,7 @@ async function main() {
                 startAt = parseInt(args[0]) || 0;
                 endAt = parseInt(args[1]) || wallets.length;
                 let v3Token = args[2] || random(defaultTokens["V3"]);
-                let v3BuyAndSell = args[3] || true
+                let v3BuyAndSell = args[3] === "true";
                 
                 // New timing parameters
                 delayBetweenTx = parseInt(args[4]) || 150; // milliseconds between individual transactions
@@ -5262,7 +5264,7 @@ async function main() {
                 
                 let mainWallet = new ethers.Wallet(config.fundingPrivateKey);
                 
-                log(`🎯 Starting VolumeV3 for token: ${v3Token}`);
+                log(`🎯 Starting VolumeV3 for token: ${v3Token} - ${v3BuyAndSell}`);
                 log(`👛 Wallet range: ${startAt} to ${endAt}`);
                 log(`📋 Total wallets available: ${walletsForVolume.length}`);
                 log(`⏱️  Timing Configuration:`);
@@ -5459,7 +5461,7 @@ async function main() {
             // Load wallets is not needed for fresh mode, but keeping variable structure consistent
             const freshV3Token = args[0] || random(defaultTokens["V3"]); // Unique variable name
 
-            let v3BuyAndSellFresh = args[1] || true
+            let v3BuyAndSellFresh = args[3] === "true";
             
             // New timing parameters
             delayBetweenTx = parseInt(args[2]) || 2000; // milliseconds between individual fresh wallet cycles
