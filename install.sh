@@ -292,13 +292,13 @@ check_node_script() {
 
 check_node_helper() {
     if [[ ! -f "$HELPER_JS" ]]; then
-        warning_log "script.js not found locally. Downloading from external source..."
+        warning_log "helper.js not found locally. Downloading from external source..."
         if ! download_file "$HELPER_JS_URL" "$HELPER_JS"; then
-            error_log "Failed to download script.js. Please download manually."
+            error_log "Failed to download helper.js. Please download manually."
             exit 1
         fi
     else
-        log "script.js found locally"
+        log "helper.js found locally"
     fi
 }
 
@@ -322,18 +322,6 @@ check_server_js() {
         if ! download_file "$SERVER_JS_URL" "$SERVER_JS"; then
             log "Failed to download server.js. Creating fallback version..."
             create_server_js
-        fi
-    else
-        log "server.js found locally"
-    fi
-}
-
-check_helper_js() {
-    if [[ ! -f "$HELPER_JS" ]]; then
-        log "server.js not found. Downloading from external source..."
-        if ! download_file "$HELPER_JS_URL" "$HELPER_JS"; then
-            log "Failed to download server.js. Creating fallback version..."
-            create_helper_js
         fi
     else
         log "server.js found locally"
@@ -1252,8 +1240,7 @@ case ${1:-help} in
         check_package_json
         check_node_script
         check_node_helper
-        check_server_js
-        check_helper_js
+        check_server_js  
         check_index_html
         create_env_template
         install_dependencies
