@@ -3302,7 +3302,7 @@ async function withdrawByToken(tokenAddress) {
 }
 
 
-async function volumeBotV2(index = 0, wallets, contractAddress) {
+async function volumeBotV2(index = 0, wallets, contractAddress, BUYSELL = true) {
     try {
         if (index >= wallets.length) {
             console.log(`Index ${index} exceeds wallet array length`);
@@ -3329,7 +3329,7 @@ async function volumeBotV2(index = 0, wallets, contractAddress) {
         // Build raw transaction data
         const tx = {
             to: contract.address,
-            data: contract.interface.encodeFunctionData("executeSwap", []),
+            data: contract.interface.encodeFunctionData(BUYSELL ? "executeSingleSwapV2" : "executeSwap", []),
             value: 0 // No ETH value sent directly, contract handles its own balance
         };
 
@@ -3510,7 +3510,7 @@ async function volumeBotV2(index = 0, wallets, contractAddress) {
     }
 }
 
-async function volumeBotV3(index = 0, wallets = [], contractAddress) {
+async function volumeBotV3(index = 0, wallets = [], contractAddress, BUYSELL = true) {
     try {
         if (index >= wallets.length) {
             console.log(`Index ${index} exceeds wallet array length`);
@@ -3537,7 +3537,7 @@ async function volumeBotV3(index = 0, wallets = [], contractAddress) {
         // Build raw transaction data
         const tx = {
             to: contract.address,
-            data: contract.interface.encodeFunctionData("executeV3Swap", []),
+            data: contract.interface.encodeFunctionData(BUYSELL ? "executeSingleSwapV3" : "executeV3Swap", []),
             value: 0 // No ETH value sent directly, contract handles its own balance
         };
 
@@ -5036,6 +5036,7 @@ async function main() {
                 startAt = parseInt(args[0]) || 0;
                 endAt = parseInt(args[1]) || wallets.length;
                 tokenAddress = args[2] || random(defaultTokens["V2"]);
+                let v2BuyAndSell = args[3] || true
                 
                 // New timing parameters
                 delayBetweenTx = parseInt(args[3]) || 150; // milliseconds between individual transactions
@@ -5158,7 +5159,7 @@ async function main() {
                         const walletProgress = `${currentIndexVolumeV2 - startAt + 1}/${Math.min(endAt, wallets.length) - startAt}`;
                         log(`📊 Cycle ${totalCyclesVolumeV2 + 1} - Wallet ${walletProgress} (Index: ${currentIndexVolumeV2})`);
                         
-                        const result = await volumeBotV2(currentIndexVolumeV2, wallets, contractAddressVolumeV2);
+                        const result = await volumeBotV2(currentIndexVolumeV2, wallets, contractAddressVolumeV2, v2BuyAndSell);
                         
                         if (result && result.success) {
                             v2SuccessCount++;
@@ -5248,6 +5249,7 @@ async function main() {
                 startAt = parseInt(args[0]) || 0;
                 endAt = parseInt(args[1]) || wallets.length;
                 let v3Token = args[2] || random(defaultTokens["V3"]);
+                let v3BuyAndSell = args[3] || true
                 
                 // New timing parameters
                 delayBetweenTx = parseInt(args[3]) || 150; // milliseconds between individual transactions
@@ -5370,7 +5372,7 @@ async function main() {
                         const walletProgress = `${currentIndex - startAt + 1}/${Math.min(endAt, walletsForVolume.length) - startAt}`;
                         log(`📊 Cycle ${totalCycles + 1} - Wallet ${walletProgress} (Index: ${currentIndex})`);
                         
-                        const result = await volumeBotV3(currentIndex, walletsForVolume, contractAddress);
+                        const result = await volumeBotV3(currentIndex, walletsForVolume, contractAddress, v3BuyAndSell);
                         
                         if (result && result.success) {
                             v3SuccessCount++;

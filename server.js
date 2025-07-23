@@ -375,12 +375,12 @@ function validateCommand(command, args) {
             if (args[2] && !isValidTokenAddress(args[2])) {
                 errors.push('Token address must be a valid Ethereum address (0x...)');
             }
-            if (args[3] && !isValidNumber(args[3], 50, 60000)) {
-                errors.push('TX delay must be between 50-60000 milliseconds');
-            }
-            if (args[4] && !isValidNumber(args[4], 1000, 300000)) {
-                errors.push('Cycle delay must be between 1000-300000 milliseconds');
-            }
+            // if (args[4] && !isValidNumber(args[3], 50, 60000)) {
+            //     errors.push('TX delay must be between 50-60000 milliseconds');
+            // }
+            // if (args[5] && !isValidNumber(args[4], 1000, 300000)) {
+            //     errors.push('Cycle delay must be between 1000-300000 milliseconds');
+            // }
             break;
             
         case 'create':

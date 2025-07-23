@@ -32,7 +32,7 @@ const contracts = {
     airdropContract: "0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3",
     multicallSwap: "0x0D99F3072fDbEDFFFf920f166F3B5d7e2bE32Ba0",
     multicallSwapV3: "0xa960Fb933b4eD5130e140824c67a6d7c4c5118a2",
-    deployerContract: "0xf3751f6a3900879b76023bDAD40286d86E61883b",
+    deployerContract: "0x50bE2eD592F26723b3cFFDBc0725bA98b1aaB1fC",
     v3SwapContract: "0xe9d7E6669C39350DD6664fd6fB66fCE4D871D374"
 };
 
@@ -76,6 +76,8 @@ const turboDeployerAbi = [
 const volumeSwapAbi = [
     // Main Functions
     "function executeSwap() external payable",
+    "function executeSingleSwapV3() external payable",
+    "function executeSingleSwapV2() external payable",
     "function executeV3Swap() external payable",
     "function withdraw() external",
     
