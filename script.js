@@ -5,7 +5,10 @@ const path = require('path');
 const { start } = require('repl');
 require('dotenv').config();
 
-const { addTokens,
+const { 
+    config,
+    provider,
+    addTokens,
     addSingleToken,
     loadTokens,
     saveTokens,
@@ -21,155 +24,21 @@ const { addTokens,
     savePrivateKey,
     analyzeTransactionGas,
     analyzeGasPrice,
-    getGasEstimates } = require("./helper")
+    getGasEstimates,
+    contracts,
+    routerAbi,
+    airdropAbi,
+    multicallAbi,
+    turboDeployerAbi,
+    volumeSwapAbi,
+    ERC20_ABI,
+    defaultTokens,
+    LockyFiDeployerAbi,
+    getContractAddress,
+    createWalletsToTarget,
+    checkWallets
+} = require("./helper")
 
-// Configuration from environment variables
-const config = {
-    rpcUrl: process.env.RPC_URL || "https://base-mainnet.g.alchemy.com/v2/your-api-key",
-    tokenFile: "tokens.json",
-    fundingPrivateKey: process.env.PK_MAIN,
-    defaultWalletCount: parseInt(process.env.DEFAULT_WALLET_COUNT) || 1000,
-    defaultChunkSize: parseInt(process.env.DEFAULT_CHUNK_SIZE) || 500,
-    defaultBatchSize: parseInt(process.env.DEFAULT_BATCH_SIZE) || 50,
-    defaultV3Fee: parseInt(process.env.DEFAULT_V3_FEE) || 10000,
-    gasSettings: {
-        gasPrice: process.env.GAS_PRICE_GWEI ? ethers.utils.parseUnits(process.env.GAS_PRICE_GWEI, 9) : null,
-        gasLimit: process.env.GAS_LIMIT ? parseInt(process.env.GAS_LIMIT) : null,
-        gasMax: process.env.GAS_MAX ? String(process.env.GAS_MAX) : "0.000004"
-    }
-};
-
-// Provider and contract configurations
-const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
-
-const contracts = {
-    uniswapRouter: "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24",
-    uniswapRouterV3: "0x2626664c2603336E57B271c5C0b26F421741e481",
-    airdropContract: "0x4F50E08aa6059aC120AD7Bb82c097Fd89f517Da3",
-    multicallSwap: "0x0D99F3072fDbEDFFFf920f166F3B5d7e2bE32Ba0",
-    multicallSwapV3: "0xa960Fb933b4eD5130e140824c67a6d7c4c5118a2",
-    deployerContract: "0xf3751f6a3900879b76023bDAD40286d86E61883b",
-    v3SwapContract: "0xe9d7E6669C39350DD6664fd6fB66fCE4D871D374"
-};
-
-const routerAbi = [
-    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)"
-];
-
-const airdropAbi = [
-    "function sendAirdropETH(address[] calldata recipients) external payable"
-];
-
-const multicallAbi = [
-    "function executeMultiSwapV3(tuple(address tokenAddress, uint256 ethAmount, address recipient, uint24 fee, uint256 minAmountOut)[] swapDetails) external payable",
-    "function executeMultiTokenSwap(address[] tokenAddresses, uint256 ethAmountPerToken, address recipient, uint24 fee, uint256 minAmountOut) external payable",
-    "function executeMultiFeeSwap(address tokenAddress, uint256 ethAmountPerSwap, address recipient, uint24[] fees, uint256 minAmountOut) external payable",
-    "function quickMultiSwap(address[] tokenAddresses, uint256 ethAmountPerToken, address recipient) external payable",
-    
-    "function executeMultiSwap(tuple(address tokenAddress, uint256 ethAmount, address recipient, address router, uint256 minAmountOut)[] swapDetails) external payable",
-    "function swapPredefinedTokens(uint256 ethAmountToken1, uint256 ethAmountToken2, uint256 minAmountOutToken1, uint256 minAmountOutToken2, address recipient, address router) external payable",
-    "function swapEqualAmounts(uint256 ethAmountEach, uint256 minAmountOutToken1, uint256 minAmountOutToken2, address recipient, address router) external payable"
-];
-
-const turboDeployerAbi = [
-    "function deploy(address tokenAddress, address owner) external payable returns (address)",
-    "function deployedContracts(uint256) external view returns (address)",
-    "function tokenToContracts(address, uint256) external view returns (address)",
-    "function ownerTokenToContract(address, address) external view returns (address)",
-    "function ownerToContracts(address, uint256) external view returns (address)",
-    "function getAllDeployedContracts() external view returns (address[])",
-    "function getDeployedContractsCount() external view returns (uint256)",
-    "function getDeployedContractByIndex(uint256 index) external view returns (address)",
-    "function getContractsByToken(address tokenAddress) external view returns (address[])",
-    "function getContractCountByToken(address tokenAddress) external view returns (uint256)",
-    "function getContractsByOwner(address owner) external view returns (address[])",
-    "function getContractCountByOwner(address owner) external view returns (uint256)",
-    "function getContractByOwnerAndToken(address owner, address tokenAddress) external view returns (address)",
-    "function hasDeployed(address owner, address tokenAddress) external view returns (bool)",
-    "event Deployed(address indexed token, address indexed deployedContract, address indexed owner)"
-];
-
-const volumeSwapAbi = [
-    // Main Functions
-    "function executeSwap() external payable",
-    "function executeV3Swap() external payable",
-    "function withdraw() external",
-    
-    // Owner Functions
-    "function changeSellValue(uint256 value) external",
-    "function changeBuyValue(uint256 value) external", 
-    "function setMaxBuy(uint256 value) external",
-    "function setOwner(address newOwner) external",
-    
-    // View Functions
-    "function WETH() external view returns (address)",
-    "function owner() external view returns (address)",
-    "function tokenAddress() external view returns (address)",
-    "function percentualSell() external view returns (uint256)",
-    "function routerUniV2() external view returns (address)",
-    "function percentualBuy() external view returns (uint256)",
-    "function maxBuy() external view returns (uint256)",
-    "function approvedRouters(address) external view returns (bool)",
-    
-    // Events
-    "event SwapPrepared(address indexed recipient, address indexed tokenAddress, uint256 amountETH)",
-    "event SwapExecuted(address indexed recipient, address indexed tokenAddress, uint256 amountETH)",
-];
-
-const ERC20_ABI = [
-    // Read functions
-    "function name() external view returns (string)",
-    "function symbol() external view returns (string)",
-    "function decimals() external view returns (uint8)",
-    "function totalSupply() external view returns (uint256)",
-    "function balanceOf(address account) external view returns (uint256)",
-    "function allowance(address owner, address spender) external view returns (uint256)",
-
-    // Write functions
-    "function approve(address spender, uint256 amount) external returns (bool)",
-    "function transfer(address recipient, uint256 amount) external returns (bool)",
-    "function transferFrom(address sender, address recipient, uint256 amount) external returns (bool)",
-
-    // Events
-    "event Transfer(address indexed from, address indexed to, uint256 value)",
-    "event Approval(address indexed owner, address indexed spender, uint256 value)"
-];
-
-
-// Default token addresses
-const defaultTokens = {
-    "V2": [
-    "0xc849418f46A25D302f55d25c40a82C99404E5245", // KIKI
-    "0xBA5E66FB16944Da22A62Ea4FD70ad02008744460", // TURBO
-    "0xe388A9a5bFD958106ADeB79df10084a8b1D9a5aB", // LORDY
-    "0x7480527815ccAE421400Da01E052b120Cc4255E9"  // WORKIE
-    ],
-    "V3": [
-    "0xf83cde146AC35E99dd61b6448f7aD9a4534133cc", // Ebert
-    "0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9", // BasedBonk
-    ]
-}
-
-// Utility functions
-
-
-const LockyFiDeployerAbi = [
-    "function deploy(address tokenAddress) external payable returns (address)",
-    "function deployedContracts(uint256) external view returns (address)",
-    "function tokenToContracts(address, uint256) external view returns (address)",
-    "function ownerTokenToContract(address, address) external view returns (address)",
-    "function ownerToContracts(address, uint256) external view returns (address)",
-    "function getAllDeployedContracts() external view returns (address[])",
-    "function getDeployedContractsCount() external view returns (uint256)",
-    "function getDeployedContractByIndex(uint256 index) external view returns (address)",
-    "function getContractsByToken(address tokenAddress) external view returns (address[])",
-    "function getContractCountByToken(address tokenAddress) external view returns (uint256)",
-    "function getContractsByOwner(address owner) external view returns (address[])",
-    "function getContractCountByOwner(address owner) external view returns (uint256)",
-    "function getContractByOwnerAndToken(address owner, address tokenAddress) external view returns (address)",
-    "function hasDeployed(address owner, address tokenAddress) external view returns (bool)",
-    "event Deployed(address indexed token, address indexed deployedContract, address indexed owner)"
-];
 
 async function deployContract(tokenAddress) {
     try {
@@ -364,175 +233,6 @@ async function deployContract(tokenAddress) {
         }
         
         throw err;
-    }
-}
-
-
-
-async function getContractAddress(tokenAddress, ownerAddress, deployerContractAddress = contracts.deployerContract) {
-    try {
-        console.log(`Retrieving contract address for:`);
-        console.log(`Token: ${tokenAddress}`);
-        console.log(`Owner: ${ownerAddress}`);
-        console.log(`Deployer Contract: ${deployerContractAddress}`);
-        
-        // Create contract instance (read-only, no signer needed)
-        const deployerContract = new ethers.Contract(deployerContractAddress, turboDeployerAbi, provider);
-        
-        // Call the contract to get the deployed contract address
-        const contractAddress = await deployerContract.getContractByOwnerAndToken(ownerAddress, tokenAddress);
-        
-        // Check if a contract was found (address(0) means no contract deployed)
-        if (contractAddress === ethers.constants.AddressZero) {
-            console.log(`❌ No contract found for this token and owner combination`);
-            return {
-                success: false,
-                reason: 'no_contract_found',
-                contractAddress: null
-            };
-        }
-        
-        console.log(`✅ Contract found: ${contractAddress}`);
-        
-        // Optional: Verify the contract exists by checking if it has code
-        try {
-            const code = await provider.getCode(contractAddress);
-            if (code === '0x') {
-                console.log(`⚠️  Warning: Contract address found but no code deployed at address`);
-                return {
-                    success: false,
-                    reason: 'no_code_at_address',
-                    contractAddress: contractAddress
-                };
-            }
-            console.log(`✅ Contract verified - code exists at address`);
-        } catch (codeError) {
-            console.log(`Could not verify contract code: ${codeError.message}`);
-        }
-        
-        return {
-            success: true,
-            contractAddress: contractAddress,
-            tokenAddress: tokenAddress,
-            ownerAddress: ownerAddress
-        };
-        
-    } catch (err) {
-        console.error(`Error retrieving contract address: ${err.message}`);
-        
-        // Handle specific error types
-        if (err.code === 'CALL_EXCEPTION') {
-            return {
-                success: false,
-                reason: 'contract_call_failed',
-                error: err.message,
-                contractAddress: null
-            };
-        } else if (err.code === 'NETWORK_ERROR') {
-            return {
-                success: false,
-                reason: 'network_error',
-                error: err.message,
-                contractAddress: null
-            };
-        }
-        
-        return {
-            success: false,
-            reason: 'unknown_error',
-            error: err.message,
-            contractAddress: null
-        };
-    }
-}
-
-// Helper function to get contract address using main wallet as owner
-async function getContractAddressForMainWallet(tokenAddress) {
-    if (!config.fundingPrivateKey) {
-        throw new Error('PK_MAIN not configured in .env file');
-    }
-    
-    const mainWallet = new ethers.Wallet(config.fundingPrivateKey);
-    return await getContractAddress(tokenAddress, mainWallet.address);
-}
-
-// getContractAddressForMainWallet("0xc849418f46A25D302f55d25c40a82C99404E5245")
-
-// Helper function to check if a contract is deployed for a token by the main wallet
-async function hasContractDeployed(tokenAddress, deployerContractAddress) {
-    try {
-        if (!config.fundingPrivateKey) {
-            throw new Error('PK_MAIN not configured in .env file');
-        }
-        
-        const mainWallet = new ethers.Wallet(config.fundingPrivateKey);
-        const deployerContract = new ethers.Contract(deployerContractAddress, LockyFiDeployerAbi, provider);
-        
-        const hasDeployed = await deployerContract.hasDeployed(mainWallet.address, tokenAddress);
-        
-        console.log(`Contract deployed check - Token: ${tokenAddress}, Has deployed: ${hasDeployed}`);
-        
-        return {
-            success: true,
-            hasDeployed: hasDeployed,
-            tokenAddress: tokenAddress,
-            ownerAddress: mainWallet.address
-        };
-        
-    } catch (err) {
-        console.error(`Error checking if contract is deployed: ${err.message}`);
-        return {
-            success: false,
-            error: err.message,
-            hasDeployed: false
-        };
-    }
-}
-
-async function createWalletsToTarget(targetCount) {
-    const existingWallets = loadWallets();
-    const currentCount = existingWallets.length;
-    
-    log(`Current wallet count: ${currentCount}`);
-    log(`Target wallet count: ${targetCount}`);
-    
-    if (currentCount >= targetCount) {
-        log(`✅ Already have ${currentCount} wallets (target: ${targetCount})`);
-        return existingWallets;
-    }
-    
-    const needed = targetCount - currentCount;
-    log(`Creating ${needed} additional wallets...`);
-    
-    return await createWallets(needed);
-}
-
-async function checkWallets() {
-    const wallets = loadWallets();
-    
-    if (wallets.length === 0) {
-        log("No wallets found. Use 'create' command to generate wallets.");
-        return;
-    }
-    
-    log(`📊 Wallet Statistics:`);
-    log(`Total wallets: ${wallets.length}`);
-    log(`First wallet: ${wallets[0][0]}`);
-    log(`Last wallet: ${wallets[wallets.length - 1][0]}`);
-    const mainWallet = new ethers.Wallet(config.fundingPrivateKey)
-    const mainwalletbalance = await provider.getBalance(mainWallet.address);
-
-    console.log(`Main Wallet: ${mainWallet.address} balance is: ${ethers.utils.formatUnits(mainwalletbalance, 18)}`)
-    
-    // Check balances of first few wallets as sample
-    log(`Checking balances of first 3 wallets...`);
-    for (let i = 0; i < Math.min(3, wallets.length); i++) {
-        try {
-            const balance = await provider.getBalance(wallets[i][0]);
-            log(`Wallet ${i}: ${wallets[i][0]} - ${ethers.utils.formatEther(balance)} ETH`);
-        } catch (err) {
-            errorLog(`Failed to check balance for wallet ${i}: ${err.message}`);
-        }
     }
 }
 
