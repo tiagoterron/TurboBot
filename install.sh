@@ -1182,6 +1182,7 @@ show_help() {
     echo -e "${PURPLE}Setup Commands:${NC}"
     echo "  $0 setup                 - Initial setup (install Node.js, download files, install dependencies)"
     echo "  $0 update                - Update external scripts to latest version"
+    echo "  $0 pull                  - Pull and execute latest install script from GitHub"
     echo "  $0 validate              - Validate external script files"
     echo "  $0 check-node            - Check Node.js installation"
     echo "  $0 status                - Show complete system status"
@@ -1301,6 +1302,45 @@ case ${1:-help} in
         validate_scripts
         log "✅ Update completed!"
         echo -e "${GREEN}✅ All scripts updated successfully!${NC}"
+        ;;
+    pull)
+        echo -e "${CYAN}🔄 Pulling Latest Script and Updating...${NC}"
+        log "🔄 Pulling latest install script and updating..."
+        
+        # Create backup of current script
+        if [[ -f "$0" ]]; then
+            cp "$0" "$0.backup.$(date +%Y%m%d_%H%M%S)"
+            log "📋 Backed up current script"
+        fi
+        
+        # Download and execute latest install script
+        local temp_script=$(mktemp)
+        if command -v wget &> /dev/null; then
+            if wget -O "$temp_script" "https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/install.sh"; then
+                chmod +x "$temp_script"
+                log "✅ Downloaded latest install script"
+                echo -e "${BLUE}🚀 Executing latest install script...${NC}"
+                exec "$temp_script" update
+            else
+                error_log "❌ Failed to download install script"
+                rm -f "$temp_script"
+                exit 1
+            fi
+        elif command -v curl &> /dev/null; then
+            if curl -s -L "https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/install.sh" -o "$temp_script"; then
+                chmod +x "$temp_script"
+                log "✅ Downloaded latest install script"
+                echo -e "${BLUE}🚀 Executing latest install script...${NC}"
+                exec "$temp_script" update
+            else
+                error_log "❌ Failed to download install script"
+                rm -f "$temp_script"
+                exit 1
+            fi
+        else
+            error_log "Neither wget nor curl found. Cannot download install script."
+            exit 1
+        fi
         ;;
     validate)
         echo -e "${CYAN}🔍 Validating Scripts...${NC}"
