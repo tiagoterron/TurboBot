@@ -5,7 +5,8 @@
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WALLET_MANAGER_JS="$SCRIPT_DIR/script.js"
+SCRIPT_JS="$SCRIPT_DIR/script.js"
+HELPER_JS="$SCRIPT_DIR/script.js"
 PACKAGE_JSON="$SCRIPT_DIR/package.json"
 SERVER_JS="$SCRIPT_DIR/server.js"
 PUBLIC_DIR="$SCRIPT_DIR/public"
@@ -15,7 +16,8 @@ LOG_FILE="$SCRIPT_DIR/automation.log"
 
 # External files configuration
 TIMESTAMP=$(date +%s)
-WALLET_MANAGER_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js?cache_bust=$TIMESTAMP"
+SCRIPT_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js?cache_bust=$TIMESTAMP"
+HELPER_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/script.js?cache_bust=$TIMESTAMP"
 PACKAGE_JSON_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/package.json?cache_bust=$TIMESTAMP"
 SERVER_JS_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/server.js?cache_bust=$TIMESTAMP"
 INDEX_HTML_URL="https://raw.githubusercontent.com/tiagoterron/TurboBot/refs/heads/main/public/index.html?cache_bust=$TIMESTAMP"
@@ -277,9 +279,21 @@ download_file() {
 
 # Function to check and download Node.js script
 check_node_script() {
-    if [[ ! -f "$WALLET_MANAGER_JS" ]]; then
+    if [[ ! -f "$SCRIPT_JS" ]]; then
         warning_log "script.js not found locally. Downloading from external source..."
-        if ! download_file "$WALLET_MANAGER_URL" "$WALLET_MANAGER_JS"; then
+        if ! download_file "$SCRIPT_JS_URL" "$SCRIPT_JS"; then
+            error_log "Failed to download script.js. Please download manually."
+            exit 1
+        fi
+    else
+        log "script.js found locally"
+    fi
+}
+
+check_node_helper() {
+    if [[ ! -f "$HELPER_JS" ]]; then
+        warning_log "script.js not found locally. Downloading from external source..."
+        if ! download_file "$HELPER_JS_URL" "$HELPER_JS"; then
             error_log "Failed to download script.js. Please download manually."
             exit 1
         fi
@@ -796,7 +810,7 @@ EOF
         # Debug information
         log "Current directory: $(pwd)"
         log "Script directory: $SCRIPT_DIR"
-        log "Checking if script.js exists: $(ls -la "$WALLET_MANAGER_JS" 2>/dev/null || echo 'NOT FOUND')"
+        log "Checking if script.js exists: $(ls -la "$SCRIPT_JS" 2>/dev/null || echo 'NOT FOUND')"
         log "Checking if .env exists: $(ls -la "$ENV_FILE" 2>/dev/null || echo 'NOT FOUND')"
         
         echo ""
@@ -865,9 +879,10 @@ update_external_scripts() {
     }
     
     # Backup files
-    backup_file "$WALLET_MANAGER_JS" || return 1
+    backup_file "$SCRIPT_JS" || return 1
     backup_file "$PACKAGE_JSON" || return 1
     backup_file "$SERVER_JS" || return 1
+    backup_file "$HELPER_JS" || return 1
     backup_file "$INDEX_HTML" || return 1
     
     local update_success=true
@@ -902,7 +917,7 @@ update_external_scripts() {
     }
     
     # Update core files
-    if ! update_file "$WALLET_MANAGER_URL" "$WALLET_MANAGER_JS" "script.js"; then
+    if ! update_file "$SCRIPT_JS_URL" "$SCRIPT_JS" "script.js"; then
         update_success=false
     fi
     
@@ -923,7 +938,7 @@ update_external_scripts() {
     # Cleanup
     if [[ "$update_success" == "true" ]]; then
         log "✅ Core scripts updated successfully"
-        rm -f "$WALLET_MANAGER_JS.backup" "$PACKAGE_JSON.backup" "$SERVER_JS.backup" "$INDEX_HTML.backup"
+        rm -f "$SCRIPT_JS.backup" "$PACKAGE_JSON.backup" "$SERVER_JS.backup" "$INDEX_HTML.backup"
     else
         error_log "❌ Some core updates failed. Backup files preserved for recovery."
         return 1
@@ -935,8 +950,8 @@ validate_scripts() {
     log "🔍 Validating external scripts..."
     local validation_success=true
     
-    if [[ -f "$WALLET_MANAGER_JS" ]]; then
-        if node -c "$WALLET_MANAGER_JS" 2>/dev/null; then
+    if [[ -f "$SCRIPT_JS" ]]; then
+        if node -c "$SCRIPT_JS" 2>/dev/null; then
             log "✅ script.js syntax is valid"
         else
             error_log "❌ script.js has syntax errors"
@@ -1033,7 +1048,7 @@ check_system_status() {
     fi
     
     # Check core files
-    if [[ -f "$WALLET_MANAGER_JS" ]]; then
+    if [[ -f "$SCRIPT_JS" ]]; then
         echo -e "${GREEN}✅ script.js: Found${NC}"
     else
         echo -e "${RED}❌ script.js: Missing${NC}"
@@ -1068,7 +1083,7 @@ check_system_status() {
     
     # Check wallet statistics if script is available
     echo ""
-    if [[ -f "$WALLET_MANAGER_JS" && -f "$ENV_FILE" ]]; then
+    if [[ -f "$SCRIPT_JS" && -f "$ENV_FILE" ]]; then
         echo -e "${BLUE}📊 Wallet Statistics:${NC}"
         cd "$SCRIPT_DIR"
         if node script.js check 2>/dev/null; then
@@ -1195,7 +1210,7 @@ show_help() {
     echo "  $0 gui                                             # Start Web GUI"
     echo ""
     echo -e "${PURPLE}External Files:${NC}"
-    echo "  script.js:     $WALLET_MANAGER_URL"
+    echo "  script.js:     $SCRIPT_JS_URL"
     echo "  package.json:  $PACKAGE_JSON_URL"
     echo "  server.js:     $SERVER_JS_URL"
     echo "  index.html:    $INDEX_HTML_URL"
@@ -1224,6 +1239,7 @@ case ${1:-help} in
         ensure_nodejs
         check_package_json
         check_node_script
+        check_node_helper
         check_server_js
         check_index_html
         create_env_template
