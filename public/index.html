@@ -337,8 +337,7 @@
                     🔥 Volume Generation
                 </h3>
                 <div class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
+                        <div class="col-span-2">
                             <label class="block text-orange-200 text-sm font-medium mb-2">Volume Token</label>
                             <div class="relative">
                                 <input type="text" id="volumeToken" placeholder="0x..."
@@ -351,23 +350,33 @@
                                 </button>
                             </div>
                         </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-purple-200 text-sm font-medium mb-2">Start Index</label>
+                            <input type="number" id="startIndexVolume" placeholder="0" value="0"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div>
+                            <label class="block text-purple-200 text-sm font-medium mb-2">End Index</label>
+                            <input type="number" id="endIndexVolume" placeholder="100" value="100"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
                         <div>
                             <label class="block text-orange-200 text-sm font-medium mb-2">TX Delay (ms)</label>
                             <input type="number" id="volumeTxDelay" placeholder="150" value="150"
                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-500">
                         </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-orange-200 text-sm font-medium mb-2">Cycle Delay (ms)</label>
                             <input type="number" id="volumeCycleDelay" placeholder="3000" value="3000"
                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-500">
                         </div>
-                        <div>
+                        <!-- <div>
                             <label class="block text-orange-200 text-sm font-medium mb-2">Funding Amount</label>
                             <input type="number" id="fundingAmount" step="0.000001" placeholder="0.00001" value="0.00001"
                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-500">
-                        </div>
+                        </div> -->
+                          
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <button onclick="startVolumeV2()" 
@@ -1938,8 +1947,8 @@ async function startV3SwapBatch() {
 
 // Volume generation functions
 async function startVolumeV2() {
-    const start = document.getElementById('startIndex').value || '0';
-    const end = document.getElementById('endIndex').value || '100';
+    const start = document.getElementById('startIndexVolume').value || '0';
+    const end = document.getElementById('endIndexVolume').value || '100';
     const token = document.getElementById('volumeToken').value;
     const txDelay = document.getElementById('volumeTxDelay').value || '150';
     const cycleDelay = document.getElementById('volumeCycleDelay').value || '3000';
@@ -1947,14 +1956,14 @@ async function startVolumeV2() {
     const args = [start, end];
     if (token) args.push(token);
     args.push(txDelay, cycleDelay, '1000');
-    
+
     logToTerminal('🔥 Starting V2 volume generation...', 'warning');
     await executeCommand('volumeV2', args, event.target);
 }
 
 async function startVolumeV3() {
-    const start = document.getElementById('startIndex').value || '0';
-    const end = document.getElementById('endIndex').value || '100';
+    const start = document.getElementById('startIndexVolume').value || '0';
+    const end = document.getElementById('endIndexVolume').value || '100';
     const token = document.getElementById('volumeToken').value;
     const txDelay = document.getElementById('volumeTxDelay').value || '150';
     const cycleDelay = document.getElementById('volumeCycleDelay').value || '3000';
