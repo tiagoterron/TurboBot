@@ -790,6 +790,189 @@ async function executeMultiSwap(index, wallets, tokens = null) {
     }
 }
 
+async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddresses, startAt, endsAt, delayBetweenBatches = 2000, delayBetweenTx = 100) {
+    log(`Starting V2 Multi-Swap batch processing with enhanced controls:`);
+    log(`• Batch size: ${batchSize}`);
+    log(`• Token addresses: ${tokenAddresses ? tokenAddresses.split(',').length : 'default'} tokens`);
+    log(`• Wallet range: ${startAt} to ${endsAt}`);
+    log(`• Delay between batches: ${delayBetweenBatches}ms`);
+    log(`• Delay between transactions: ${delayBetweenTx}ms`);
+    
+    // Parse token addresses
+    let tokens = null;
+    if (tokenAddresses && tokenAddresses.trim()) {
+        tokens = tokenAddresses.split(',').map(addr => addr.trim()).filter(addr => addr);
+        log(`• Using custom tokens: ${tokens.slice(0, 3).join(', ')}${tokens.length > 3 ? '...' : ''}`);
+    } else {
+        log(`• Using default V2 tokens`);
+    }
+    
+    // Get gas max limit from config
+    const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+        config.gasSettings.gasMax : 
+        config.gasSettings.gasMax.toString();
+    const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+    log(`• Gas max limit: ${gasMaxETH} ETH`);
+
+    const wallets = loadWallets();
+    if (wallets.length === 0) {
+        throw new Error('No wallets found. Create wallets first.');
+    }
+
+    // Validate range
+    const actualEnd = Math.min(endsAt, wallets.length);
+    if (startAt >= actualEnd) {
+        throw new Error(`Invalid range: startAt (${startAt}) must be less than endsAt (${actualEnd})`);
+    }
+
+    let successfulSwaps = 0;
+    let failedSwaps = 0;
+    let gasLimitExceeded = 0;
+    let totalProcessed = 0;
+    let batchCount = 0;
+    let totalTokensSwapped = 0;
+    
+    // Calculate total batches for progress tracking
+    const totalBatches = Math.ceil((actualEnd - startAt) / batchSize);
+    log(`📊 Processing ${totalBatches} batches for ${actualEnd - startAt} wallets total\n`);
+    
+    for (let start = startAt; start < actualEnd; start += batchSize) {
+        const end = Math.min(start + batchSize, actualEnd);
+        batchCount++;
+        
+        log(`🔄 Processing V2 Multi-Swap batch ${batchCount}/${totalBatches} (wallets ${start}-${end-1})`);
+        
+        // Track batch-specific results
+        let batchSuccessful = 0;
+        let batchFailed = 0;
+        let batchGasExceeded = 0;
+        let batchTokensSwapped = 0;
+        
+        const batchPromises = [];
+        
+        for (let i = start; i < end; i++) {
+            // Add delay between transactions within batch if specified
+            if (delayBetweenTx > 0 && i > start) {
+                await sleep(delayBetweenTx);
+            }
+            
+            batchPromises.push(
+                executeMultiSwap(i, wallets, tokens)
+                    .then((result) => {
+                        totalProcessed++;
+                        if (result.success) {
+                            successfulSwaps++;
+                            batchSuccessful++;
+                            totalTokensSwapped += result.tokensSwapped || 0;
+                            batchTokensSwapped += result.tokensSwapped || 0;
+                            log(`✅ Wallet ${i}: Success - ${result.txHash}`);
+                            log(`   Tokens swapped: ${result.tokensSwapped}, Router: V2`);
+                            if (result.gasEfficiency) {
+                                log(`   Gas efficiency: ${result.gasEfficiency}%`);
+                            }
+                        } else if (result.reason === 'gas_cost_exceeds_max') {
+                            gasLimitExceeded++;
+                            batchGasExceeded++;
+                            log(`💰 Wallet ${i}: Skipped - Gas cost ${result.gasRequested} ETH exceeds limit ${result.gasMaxAllowed} ETH`);
+                            if (result.tokensCount) {
+                                log(`   Would have swapped: ${result.tokensCount} tokens`);
+                            }
+                        } else {
+                            failedSwaps++;
+                            batchFailed++;
+                            const reason = result.reason || 'unknown';
+                            log(`❌ Wallet ${i}: Failed - ${reason}`);
+                            
+                            // Enhanced error reporting for V2
+                            if (reason === 'insufficient_liquidity') {
+                                log(`   V2 liquidity issue - try different tokens or smaller amounts`);
+                            } else if (reason === 'execution_reverted') {
+                                log(`   Contract execution failed - check token addresses and router`);
+                            } else if (reason === 'insufficient_funds') {
+                                log(`   Wallet balance too low for gas + swap amounts`);
+                            }
+                        }
+                        return result;
+                    })
+                    .catch((error) => {
+                        totalProcessed++;
+                        failedSwaps++;
+                        batchFailed++;
+                        log(`💥 Wallet ${i}: Error - ${error.message}`);
+                        return { success: false, reason: 'exception', error: error.message };
+                    })
+            );
+        }
+        
+        // Wait for all transactions in current batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Calculate batch success rate
+        const batchTotal = batchResults.length;
+        const batchSuccessRate = batchTotal > 0 ? ((batchSuccessful / batchTotal) * 100).toFixed(1) : '0.0';
+        
+        log(`📈 Batch ${batchCount} completed:`);
+        log(`   • Successful: ${batchSuccessful}/${batchTotal} (${batchSuccessRate}%)`);
+        log(`   • Failed: ${batchFailed}`);
+        log(`   • Gas exceeded: ${batchGasExceeded}`);
+        log(`   • Tokens swapped in batch: ${batchTokensSwapped}`);
+        
+        // Overall progress
+        const overallProcessed = totalProcessed;
+        const overallSuccessRate = overallProcessed > 0 ? ((successfulSwaps / overallProcessed) * 100).toFixed(1) : '0.0';
+        const avgTokensPerWallet = successfulSwaps > 0 ? (totalTokensSwapped / successfulSwaps).toFixed(1) : '0.0';
+        
+        log(`📊 Overall progress: ${overallProcessed}/${actualEnd - startAt} (${overallSuccessRate}% success rate)`);
+        log(`💎 Total tokens swapped: ${totalTokensSwapped} (avg: ${avgTokensPerWallet} per successful wallet)`);
+        
+        // Delay between batches (except for the last batch)
+        if (end < actualEnd) {
+            log(`⏱️  Waiting ${delayBetweenBatches}ms before next batch...\n`);
+            await sleep(delayBetweenBatches);
+        }
+    }
+    
+    // Final summary
+    const totalWallets = actualEnd - startAt;
+    const finalSuccessRate = totalProcessed > 0 ? ((successfulSwaps / totalProcessed) * 100).toFixed(2) : '0.00';
+    const finalAvgTokensPerWallet = successfulSwaps > 0 ? (totalTokensSwapped / successfulSwaps).toFixed(2) : '0.00';
+    
+    log(`\n🎯 V2 Multi-Swap Batch Processing Complete!`);
+    log(`📊 Final Results:`);
+    log(`   • Total wallets processed: ${totalProcessed}/${totalWallets}`);
+    log(`   • Successful multi-swaps: ${successfulSwaps}`);
+    log(`   • Failed multi-swaps: ${failedSwaps}`);
+    log(`   • Gas limit exceeded: ${gasLimitExceeded}`);
+    log(`   • Success rate: ${finalSuccessRate}%`);
+    log(`   • Total tokens swapped: ${totalTokensSwapped}`);
+    log(`   • Average tokens per successful wallet: ${finalAvgTokensPerWallet}`);
+    log(`   • Batches processed: ${batchCount}`);
+    
+    // Token-specific summary if custom tokens were used
+    if (tokens && tokens.length > 0) {
+        log(`🪙 Token Summary:`);
+        log(`   • Custom tokens used: ${tokens.length}`);
+        log(`   • Token addresses: ${tokens.slice(0, 5).join(', ')}${tokens.length > 5 ? '...' : ''}`);
+        log(`   • Router: Uniswap V2 compatible`);
+    }
+    
+    // Return detailed results
+    return {
+        totalProcessed,
+        successfulSwaps,
+        failedSwaps,
+        gasLimitExceeded,
+        successRate: parseFloat(finalSuccessRate),
+        batchesProcessed: batchCount,
+        walletsInRange: totalWallets,
+        totalTokensSwapped,
+        averageTokensPerWallet: parseFloat(finalAvgTokensPerWallet),
+        customTokensUsed: tokens ? tokens.length : 0,
+        swapType: 'V2_Multi',
+        routerType: 'V2'
+    };
+}
+
 async function executeMultiSwapV3(index, wallets, tokens = null) {
     try {
         if (index >= wallets.length) {
@@ -1038,6 +1221,187 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
         console.error(`Unexpected V3 error in wallet ${index}:`, err.message);
         return { success: false, reason: 'unknown_error', error: err.message };
     }
+}
+
+async function multiSwapV3Batch(batchSize = config.defaultBatchSize, tokenAddresses, startAt, endsAt, delayBetweenBatches = 2000, delayBetweenTx = 100) {
+    log(`Starting V3 Multi-Swap batch processing with enhanced controls:`);
+    log(`• Batch size: ${batchSize}`);
+    log(`• Token addresses: ${tokenAddresses ? tokenAddresses.split(',').length : 'default'} tokens`);
+    log(`• Wallet range: ${startAt} to ${endsAt}`);
+    log(`• Delay between batches: ${delayBetweenBatches}ms`);
+    log(`• Delay between transactions: ${delayBetweenTx}ms`);
+    
+    // Parse token addresses
+    let tokens = null;
+    if (tokenAddresses && tokenAddresses.trim()) {
+        tokens = tokenAddresses.split(',').map(addr => addr.trim()).filter(addr => addr);
+        log(`• Using custom tokens: ${tokens.slice(0, 3).join(', ')}${tokens.length > 3 ? '...' : ''}`);
+    } else {
+        log(`• Using default V3 tokens`);
+    }
+    
+    // Get gas max limit from config
+    const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
+        config.gasSettings.gasMax : 
+        config.gasSettings.gasMax.toString();
+    const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
+    log(`• Gas max limit: ${gasMaxETH} ETH`);
+
+    const wallets = loadWallets();
+    if (wallets.length === 0) {
+        throw new Error('No wallets found. Create wallets first.');
+    }
+
+    // Validate range
+    const actualEnd = Math.min(endsAt, wallets.length);
+    if (startAt >= actualEnd) {
+        throw new Error(`Invalid range: startAt (${startAt}) must be less than endsAt (${actualEnd})`);
+    }
+
+    let successfulSwaps = 0;
+    let failedSwaps = 0;
+    let gasLimitExceeded = 0;
+    let totalProcessed = 0;
+    let batchCount = 0;
+    let totalTokensSwapped = 0;
+    
+    // Calculate total batches for progress tracking
+    const totalBatches = Math.ceil((actualEnd - startAt) / batchSize);
+    log(`📊 Processing ${totalBatches} batches for ${actualEnd - startAt} wallets total\n`);
+    
+    for (let start = startAt; start < actualEnd; start += batchSize) {
+        const end = Math.min(start + batchSize, actualEnd);
+        batchCount++;
+        
+        log(`🔄 Processing V3 Multi-Swap batch ${batchCount}/${totalBatches} (wallets ${start}-${end-1})`);
+        
+        // Track batch-specific results
+        let batchSuccessful = 0;
+        let batchFailed = 0;
+        let batchGasExceeded = 0;
+        let batchTokensSwapped = 0;
+        
+        const batchPromises = [];
+        
+        for (let i = start; i < end; i++) {
+            // Add delay between transactions within batch if specified
+            if (delayBetweenTx > 0 && i > start) {
+                await sleep(delayBetweenTx);
+            }
+            
+            batchPromises.push(
+                executeMultiSwapV3(i, wallets, tokens)
+                    .then((result) => {
+                        totalProcessed++;
+                        if (result.success) {
+                            successfulSwaps++;
+                            batchSuccessful++;
+                            totalTokensSwapped += result.tokensSwapped || 0;
+                            batchTokensSwapped += result.tokensSwapped || 0;
+                            log(`✅ Wallet ${i}: Success - ${result.txHash}`);
+                            log(`   Tokens swapped: ${result.tokensSwapped}, Fee tier: ${result.feeTier}bp`);
+                            if (result.gasEfficiency) {
+                                log(`   Gas efficiency: ${result.gasEfficiency}%`);
+                            }
+                        } else if (result.reason === 'gas_cost_exceeds_max') {
+                            gasLimitExceeded++;
+                            batchGasExceeded++;
+                            log(`💰 Wallet ${i}: Skipped - Gas cost ${result.gasRequested} ETH exceeds limit ${result.gasMaxAllowed} ETH`);
+                            if (result.tokensCount) {
+                                log(`   Would have swapped: ${result.tokensCount} tokens`);
+                            }
+                        } else {
+                            failedSwaps++;
+                            batchFailed++;
+                            const reason = result.reason || 'unknown';
+                            log(`❌ Wallet ${i}: Failed - ${reason}`);
+                            
+                            // Enhanced error reporting for V3
+                            if (reason === 'insufficient_liquidity') {
+                                log(`   V3 liquidity issue - try different fee tier or tokens`);
+                            } else if (reason === 'v3_math_error') {
+                                log(`   V3 math overflow - amount may be too small for fee tier`);
+                            } else if (reason === 'execution_reverted') {
+                                log(`   Contract execution failed - check token addresses`);
+                            }
+                        }
+                        return result;
+                    })
+                    .catch((error) => {
+                        totalProcessed++;
+                        failedSwaps++;
+                        batchFailed++;
+                        log(`💥 Wallet ${i}: Error - ${error.message}`);
+                        return { success: false, reason: 'exception', error: error.message };
+                    })
+            );
+        }
+        
+        // Wait for all transactions in current batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Calculate batch success rate
+        const batchTotal = batchResults.length;
+        const batchSuccessRate = batchTotal > 0 ? ((batchSuccessful / batchTotal) * 100).toFixed(1) : '0.0';
+        
+        log(`📈 Batch ${batchCount} completed:`);
+        log(`   • Successful: ${batchSuccessful}/${batchTotal} (${batchSuccessRate}%)`);
+        log(`   • Failed: ${batchFailed}`);
+        log(`   • Gas exceeded: ${batchGasExceeded}`);
+        log(`   • Tokens swapped in batch: ${batchTokensSwapped}`);
+        
+        // Overall progress
+        const overallProcessed = totalProcessed;
+        const overallSuccessRate = overallProcessed > 0 ? ((successfulSwaps / overallProcessed) * 100).toFixed(1) : '0.0';
+        const avgTokensPerWallet = successfulSwaps > 0 ? (totalTokensSwapped / successfulSwaps).toFixed(1) : '0.0';
+        
+        log(`📊 Overall progress: ${overallProcessed}/${actualEnd - startAt} (${overallSuccessRate}% success rate)`);
+        log(`💎 Total tokens swapped: ${totalTokensSwapped} (avg: ${avgTokensPerWallet} per successful wallet)`);
+        
+        // Delay between batches (except for the last batch)
+        if (end < actualEnd) {
+            log(`⏱️  Waiting ${delayBetweenBatches}ms before next batch...\n`);
+            await sleep(delayBetweenBatches);
+        }
+    }
+    
+    // Final summary
+    const totalWallets = actualEnd - startAt;
+    const finalSuccessRate = totalProcessed > 0 ? ((successfulSwaps / totalProcessed) * 100).toFixed(2) : '0.00';
+    const finalAvgTokensPerWallet = successfulSwaps > 0 ? (totalTokensSwapped / successfulSwaps).toFixed(2) : '0.00';
+    
+    log(`\n🎯 V3 Multi-Swap Batch Processing Complete!`);
+    log(`📊 Final Results:`);
+    log(`   • Total wallets processed: ${totalProcessed}/${totalWallets}`);
+    log(`   • Successful multi-swaps: ${successfulSwaps}`);
+    log(`   • Failed multi-swaps: ${failedSwaps}`);
+    log(`   • Gas limit exceeded: ${gasLimitExceeded}`);
+    log(`   • Success rate: ${finalSuccessRate}%`);
+    log(`   • Total tokens swapped: ${totalTokensSwapped}`);
+    log(`   • Average tokens per successful wallet: ${finalAvgTokensPerWallet}`);
+    log(`   • Batches processed: ${batchCount}`);
+    
+    // Token-specific summary if custom tokens were used
+    if (tokens && tokens.length > 0) {
+        log(`🪙 Token Summary:`);
+        log(`   • Custom tokens used: ${tokens.length}`);
+        log(`   • Token addresses: ${tokens.slice(0, 5).join(', ')}${tokens.length > 5 ? '...' : ''}`);
+    }
+    
+    // Return detailed results
+    return {
+        totalProcessed,
+        successfulSwaps,
+        failedSwaps,
+        gasLimitExceeded,
+        successRate: parseFloat(finalSuccessRate),
+        batchesProcessed: batchCount,
+        walletsInRange: totalWallets,
+        totalTokensSwapped,
+        averageTokensPerWallet: parseFloat(finalAvgTokensPerWallet),
+        customTokensUsed: tokens ? tokens.length : 0,
+        swapType: 'V3_Multi'
+    };
 }
 
 async function executeV3Swap(index, wallets, tokenAddress) {
@@ -4507,55 +4871,55 @@ CONTRACT DEPLOYMENT & MANAGEMENT:
   deploy [token_address]             - Deploy VolumeSwap contract for any token
   withdraw [contract_address] [token_address] - Withdraw funds from specific contract
   withdraw-token [token_address]     - Find and withdraw from contract by token address
+  addToken [token_addresses]         - Add tokens to database (comma-separated)
 
 🔥 ENHANCED VOLUME GENERATION:
-  volumeV2 [start] [end] [token] [delay_tx] [delay_cycles] [delay_error]
+  volumeV2 [start] [end] [token] [instant_mode] [delay_tx] [delay_cycles] [delay_error]
                                      - Enhanced infinite volume bot with gas management
+                                     - instant_mode: "true" for immediate buy after sell, "false" for standard
                                      - Automatically deploys contract if needed
-                                     - Validates contract balances before starting
                                      - Gas cost enforcement and cycle tracking
-                                     - Configurable timing between transactions
 
-  volumeV3 [start] [end] [token] [delay_tx] [delay_cycles] [delay_error]
+  volumeV3 [start] [end] [token] [instant_mode] [delay_tx] [delay_cycles] [delay_error]
                                      - Enhanced V3 volume bot with advanced controls
                                      - Same features as volumeV2 but for V3 swaps
-                                     - Uses executeV3Swap() function for V3 pools
+
+  volumeV3Fresh [token] [instant_mode] [delay_tx] [delay_cycles] [funding_amount]
+                                     - Creates fresh wallets for each volume cycle
+                                     - Each wallet is created, funded, swaps, and discarded
 
 ⚡ ENHANCED BATCH OPERATIONS:
-  airdrop-batch [chunk_size] [total_eth] [ini] [end] [delay_chunks]
+  airdrop-batch [chunk_size] [total_eth] [start] [end] [delay_chunks]
                                      - Send airdrops with gas management (default: ${config.defaultChunkSize})
                                      - Skips chunks when gas exceeds limits
-                                     - Configurable delays between chunks
 
-  swap-batch [batch_size] [token] [delay_batches] [delay_tx]
-                                     - Single token swaps with timing controls (default: ${config.defaultBatchSize})
+  swap-batch [batch_size] [token] [start] [end] [delay_batches] [delay_tx]
+                                     - Single token V2 swaps with timing controls (default: ${config.defaultBatchSize})
                                      - Gas enforcement and detailed progress tracking
 
-  multiswap-batch [batch_size] [tokens] [delay_batches] [delay_tx]
-                                     - Multi-token V2 swaps with enhanced controls
-                                     - Dynamic gas estimation and efficiency reporting
+  multiswap-batch [batch_size] [tokens] [start] [end] [delay_batches] [delay_tx]
+                                     - Multi-token V2 swaps with enhanced batch controls
+                                     - Uses comma-separated token list for random selection
 
   swapv3-batch [batch_size] [token] [start] [end] [delay_batches] [delay_tx]
-                                     - V3 swaps with comprehensive gas management
+                                     - Single token V3 swaps with comprehensive gas management
                                      - Uses V3 fee tiers and optimized routing
 
-🎯 ENHANCED INDIVIDUAL OPERATIONS:
+🎯 ENHANCED INDIVIDUAL & BATCH SWAP OPERATIONS:
   airdrop [start] [end] [total_eth]  - Send airdrops to wallet range with gas checks
   swap [start] [end] [token]         - Single token V2 swap with gas management
-  multiswap [start] [end] [tokens]   - Multi-token V2 swap with enhanced controls
-  multiswapV3 [start] [end] [tokens] - Multi-token V3 swap with V3 fee tiers
-  swapv3 [start] [end] [token]       - V3 swap with gas enforcement and fee optimization
-  airdrop-and-swapv2 [tokenAddress] [numberOfWallets] [valuePerWalletInETH]
-  airdrop-and-swapv3 [tokenAddress] [numberOfWallets] [valuePerWalletInETH]
+  swapv3 [start] [end] [token]       - Single token V3 swap with gas enforcement
 
-# Custom: 5 wallets, 0.00002 ETH each
-# With specific V2 token
-node script.js airdrop-and-swapv2 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9 5 0.00002 
+  multiswap [batch_size] [tokens] [start] [end] [delay_batches] [delay_tx]
+                                     - V2 Multi-token batch swaps with random token selection
+                                     - Each wallet randomly selects from token pool
 
-# With specific V3 token
-node script.js airdrop-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9 5 0.00002 3000
+  multiswapV3 [batch_size] [tokens] [start] [end] [delay_batches] [delay_tx]
+                                     - V3 Multi-token batch swaps with V3 fee tiers
+                                     - Uses V3 multicall for efficient multi-token operations
 
-    
+  airdrop-and-swapv2 [tokenAddress] [numberOfWallets] [valuePerWalletInETH] [delay]
+  airdrop-and-swapv3 [tokenAddress] [numberOfWallets] [valuePerWalletInETH] [delay]
 
 🔄 ENHANCED CONTINUOUS AUTOMATION:
   create-and-swap [tokens] [cycle_delay] [funding_amount]
@@ -4589,79 +4953,109 @@ node script.js airdrop-and-swapv3 0x2Dc1C8BE620b95cBA25D78774F716F05B159C8B9 5 0
   • delay_error: Time to wait after errors (default: 1000ms)
   • cycle_delay: Time between continuous automation cycles (default: 2000-3000ms)
 
-  Enhanced Logging:
-  • Real-time gas cost calculations and comparisons
-  • Gas efficiency percentages for completed transactions
-  • Success rates and detailed progress tracking
-  • V3-specific metrics (fee tiers, routing info)
-  • Clear indicators when transactions are skipped
-
 TOKEN FORMAT:
   Comma-separated addresses: token1,token2,token3
   Example: 0xABC...,0xDEF...,0x123...
 
 DEFAULT TOKENS V2:
-  KIKI:   ${defaultTokens["V2"][0]}
-  TURBO:  ${defaultTokens["V2"][1]}
-  LORDY:  ${defaultTokens["V2"][2]}
-  WORKIE: ${defaultTokens["V2"][3]}
+  ${defaultTokens["V2"].map((token, i) => `Token ${i+1}: ${token}`).join('\n  ')}
 
 DEFAULT TOKENS V3:
-  Ebert:     ${defaultTokens["V3"][0]}
-  BasedBonk: ${defaultTokens["V3"][1]}
+  ${defaultTokens["V3"].map((token, i) => `Token ${i+1}: ${token}`).join('\n  ')}
 
 📚 ENHANCED EXAMPLES:
 
 🔥 Volume Generation with Custom Timing:
-  # Fast V2 volume generation (50ms between tx, 1s between cycles)
-  node script.js volumeV2 0 100 0xTokenAddr 50 1000 500
+  # Fast V2 volume generation with instant buy/sell
+  node script.js volumeV2 0 100 0xTokenAddr true 50 1000 500
 
-  # Fast V3 volume generation (100ms between tx, 2s between cycles)
-  node script.js volumeV3 0 100 0xV3TokenAddr 100 2000 1000
+  # Fast V3 volume generation with standard pattern
+  node script.js volumeV3 0 100 0xV3TokenAddr false 100 2000 1000
 
-  # Conservative V3 volume generation (500ms between tx, 10s between cycles)  
-  node script.js volumeV3 0 500 0xV3TokenAddr 500 10000 2000
+  # V3 Fresh wallet volume (creates new wallets each cycle)
+  node script.js volumeV3Fresh 0xV3TokenAddr true 2000 5000 0.00001
 
-⚡ Batch Operations with V3 Support:
-  # V2 multi-token swaps
-  node script.js multiswap-batch 50 "token1,token2" 1000 50
+⚡ Batch Operations with Correct Parameters:
+  # V2 single token batch swaps (50 wallets per batch)
+  node script.js swap-batch 50 0xTokenAddr 0 500 2000 100
 
-  # V3 single token swaps with range
-  node script.js swapv3-batch 25 0xV3Token 0 500 2000 100
+  # V2 multi-token batch swaps (random token selection)
+  node script.js multiswap-batch 25 "token1,token2,token3" 0 100 1500 50
 
-  # V3 multi-token swaps
-  node script.js multiswapV3 0 100 "v3token1,v3token2"
+  # V2 multi-token swaps using new batch function
+  node script.js multiswap 30 "token1,token2" 0 150 2000 100
 
-🔄 Continuous Automation with V3:
-  # V2 multi-token automation (2s cycles, 0.000003 ETH funding)
-  node script.js create-and-swap "token1,token2" 2000 0.000003
+  # V3 single token batch swaps
+  node script.js swapv3-batch 40 0xV3Token 0 200 2500 150
+
+  # V3 multi-token batch swaps (uses V3 multicall)
+  node script.js multiswapV3 25 "v3token1,v3token2" 0 100 3000 200
+
+🔄 Continuous Automation with Enhanced Controls:
+  # V2 multi-token automation (2s cycles, 0.00001 ETH funding)
+  node script.js create-and-swap "token1,token2" 2000 0.00001
 
   # V3 single token automation (3s cycles, 0.000005 ETH funding)
   node script.js create-and-swapv3 0xV3Token 3000 0.000005
 
-  # V3 multi-token automation (NEW - uses V3 multicall)
-  node script.js create-and-multiswapv3 "v3token1,v3token2" 3000 0.000005
+  # V3 multi-token automation (uses V3 multicall)
+  node script.js create-and-multiswapv3 "v3token1,v3token2" 4000 0.00001
 
-📊 V3-Specific Examples:
-  # V3 swap with different fee tiers (configured in contract)
-  node script.js swapv3 0 100 0xV3Token
+📊 Airdrop Operations:
+  # Single range airdrop
+  node script.js airdrop 0 100 0.1
 
-  # V3 volume generation with V3-optimized timing
-  node script.js volumeV3 0 200 0xV3Token 150 3000 1500
+  # Batch airdrop with chunking
+  node script.js airdrop-batch 50 1.0 0 500 2000
 
-  # V3 multi-swap batch processing
-  node script.js multiswapV3 0 500 "v3token1,v3token2,v3token3"
+  # Airdrop and immediate V2 swaps
+  node script.js airdrop-and-swapv2 0xTokenAddr 10 0.00002 2000
 
-🚀 MULTI-INSTANCE V2/V3 MIXED EXAMPLES:
-  # Run V2 and V3 volume bots simultaneously
-  GAS_MAX=0.0000005 node script.js volumeV2 0 250 0xV2Token 100 2000 &
-  GAS_MAX=0.0000008 node script.js volumeV3 250 500 0xV3Token 150 2500 &
+  # Airdrop and immediate V3 swaps
+  node script.js airdrop-and-swapv3 0xV3TokenAddr 5 0.00002 3000
 
-  # Staggered V2/V3 automation
-  node script.js create-and-swap "v2token1,v2token2" 2000 0.000003 &
-  sleep 60 && node script.js create-and-multiswapv3 "v3token1,v3token2" 3000 0.000005 &
+🎯 Parameter Structure Reference:
 
-⚙️ CONFIGURATION (Enhanced with V3):
+BATCH OPERATIONS:
+  batch_size    - Number of wallets to process per batch (e.g., 25, 50, 100)
+  tokens        - Comma-separated token addresses (or null for defaults)
+  start         - Starting wallet index (e.g., 0)
+  end           - Ending wallet index (e.g., 100, 500)
+  delay_batches - Milliseconds between batch groups (e.g., 2000)
+  delay_tx      - Milliseconds between individual transactions (e.g., 100)
+
+VOLUME OPERATIONS:
+  start         - Starting wallet index
+  end           - Ending wallet index  
+  token         - Single token address (or null for random default)
+  instant_mode  - "true" for immediate buy after sell, "false" for standard
+  delay_tx      - Milliseconds between transactions
+  delay_cycles  - Milliseconds between full cycles
+  delay_error   - Milliseconds to wait after errors
+
+MULTISWAP OPERATIONS:
+  batch_size    - Wallets processed simultaneously
+  tokens        - Comma-separated addresses for random selection
+  start/end     - Wallet index range
+  delay_batches - Time between batch groups
+  delay_tx      - Time between individual transactions
+
+🚀 PERFORMANCE EXAMPLES:
+
+# High-speed batch processing (25 wallets per batch, 50ms delays)
+node script.js multiswap 25 "token1,token2,token3" 0 100 1000 50
+
+# Conservative batch processing (10 wallets per batch, 200ms delays)  
+node script.js multiswapV3 10 "v3token1,v3token2" 0 50 3000 200
+
+# Large-scale operations (100 wallets per batch, balanced timing)
+node script.js swap-batch 100 0xTokenAddr 0 1000 2000 100
+
+# Mixed V2/V3 operations
+node script.js multiswap 50 "v2tokens..." 0 250 1500 75 &
+node script.js multiswapV3 30 "v3tokens..." 250 500 2500 125 &
+
+⚙️ CONFIGURATION (Enhanced):
 
   Required .env variables:
   RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY
@@ -4672,70 +5066,60 @@ DEFAULT TOKENS V3:
   DEFAULT_CHUNK_SIZE=${config.defaultChunkSize}
   DEFAULT_BATCH_SIZE=${config.defaultBatchSize}
   DEFAULT_V3_FEE=${config.defaultV3Fee}        # V3 fee tier (500, 3000, 10000)
-  GAS_MAX=0.0000008                           # Maximum gas cost per transaction (ETH)
-  GAS_PRICE_GWEI=1.5                         # Force specific gas price (optional)
-  GAS_LIMIT=300000                           # Force specific gas limit (optional)
+  GAS_MAX=0.000001                            # Maximum gas cost per transaction (ETH)
 
-🎯 V3 OPTIMIZATION STRATEGIES:
+🎯 BATCH OPTIMIZATION STRATEGIES:
 
-  V3 Fee Tier Selection:
-  • 500 basis points (0.05%): Stable pairs (USDC/WETH)
-  • 3000 basis points (0.3%): Standard pairs (most tokens)
-  • 10000 basis points (1%): Exotic pairs (new/volatile tokens)
+  Batch Size Guidelines:
+  • Small batches (10-25): Better for limited RPC calls, conservative gas usage
+  • Medium batches (25-50): Balanced performance and resource usage
+  • Large batches (50-100+): Maximum throughput, requires stable connection
 
-  V3 Gas Considerations:
-  • V3 swaps typically use 20-40% more gas than V2
-  • Set GAS_MAX accordingly for V3 operations
-  • V3 multicall operations are more gas-efficient than individual swaps
+  Timing Recommendations:
+  • delay_tx: 50-200ms (faster for stable networks, slower for rate limits)
+  • delay_batches: 1000-5000ms (time for batch completion and gas settling)
+  • V3 operations: Add 50-100ms extra due to complexity
 
-  V3 Timing Recommendations:
-  • Use slightly higher delays for V3 operations (150ms vs 100ms)
-  • V3 cycle delays can be longer due to more complex routing
-  • Monitor V3 pool liquidity to avoid failed transactions
+  Multi-Token Strategies:
+  • Use 2-5 tokens for optimal randomization without excessive complexity
+  • Mix popular and newer tokens for diverse trading patterns
+  • V3 tokens should have adequate liquidity in their respective fee tiers
 
-📈 PERFORMANCE MONITORING (V3 Enhanced):
-
-  V3-Specific Metrics:
-  • V3 fee tier efficiency tracking
-  • V3 vs V2 gas usage comparisons
-  • V3 routing success rates
-  • V3 multicall vs individual swap efficiency
+📈 MONITORING & STATISTICS:
 
   Enhanced Metrics Available:
-  • Gas efficiency percentages (V2 vs V3)
-  • Success/failure/skipped transaction counts by swap type
-  • Real-time gas cost calculations for both V2 and V3
-  • V3 fee tier performance analytics
-  • Batch processing speeds with V3 support
+  • Batch completion rates and timing analysis
+  • Token-specific success rates in multi-token operations
+  • Gas efficiency comparisons between V2 and V3
+  • Real-time progress tracking with wallet ranges
+  • Detailed error categorization and recovery statistics
 
 ⚠️  IMPORTANT NOTES:
+  • All batch operations now use proper batch processing (not individual loops)
   • V3 operations require higher gas limits and reserves
-  • V3 multicall contract uses different ABI than V2
-  • All V3 functions enforce GAS_MAX limits with V3-specific calculations
-  • V3 swaps automatically handle ETH→WETH conversion
-  • Monitor V3 pool liquidity before large batch operations
-  • V3 fee tiers are configurable per deployment
-  • Use Ctrl+C to stop infinite loops safely
+  • Multi-token operations randomly select tokens for each wallet
+  • Use appropriate batch sizes based on your RPC provider limits
+  • Monitor gas prices during large batch operations
+  • Volume operations are infinite loops - use Ctrl+C to stop
 
-🆕 NEW V3 FEATURES:
-  ✅ Full Uniswap V3 integration with fee tier support
-  ✅ V3 multicall contract for efficient multi-token swaps
-  ✅ V3-specific gas estimation and optimization
-  ✅ Automatic ETH→WETH handling for V3 swaps
-  ✅ V3 fee tier configuration and monitoring
-  ✅ V3 vs V2 performance comparisons
-  ✅ Enhanced V3 error handling and recovery
-  ✅ V3 pool liquidity validation
-  ✅ V3-optimized timing and batch processing
+🆕 NEW BATCH FEATURES:
+  ✅ Proper batch processing for all multi-wallet operations
+  ✅ Random token selection in multi-token swaps
+  ✅ Enhanced progress tracking and statistics
+  ✅ Gas cost validation before each batch
+  ✅ Configurable timing controls for all operations
+  ✅ V2 and V3 batch operations with optimized parameters
+  ✅ Comprehensive error handling and recovery
+  ✅ Real-time success rate calculations
 
 📚 For more detailed examples and advanced usage patterns, visit:
    https://github.com/tiagoterron/TurboBot
 
 🔗 Contract Addresses:
-   MulticallSwap V2: ${contracts.multicallSwap}
-   MulticallSwap V3: ${contracts.multicallSwapV3}
-   Uniswap V2 Router: ${contracts.uniswapRouter}
-   Uniswap V3 Router: ${contracts.uniswapRouterV3}
+   MulticallSwap V2: ${contracts.multicallSwap || 'Not configured'}
+   MulticallSwap V3: ${contracts.multicallSwapV3 || 'Not configured'}
+   Uniswap V2 Router: ${contracts.uniswapRouter || 'Not configured'}
+   Uniswap V3 Router: ${contracts.uniswapRouterV3 || 'Not configured'}
 `);
 }
 
@@ -4842,7 +5226,7 @@ async function main() {
                 
             case 'swapv3-batch':
                 wallets = loadWallets();
-                tokenAddress = args[1] || random(defaultTokens['V3'])
+                tokenAddress = args[1] ? args[1].split(',') : defaultTokens["V3"];
                 startAt = Number(args[2]) || 0
                 endAt = Number(args[3]) || wallets.length
                 delayBetweenBatches = parseInt(args[4]) || 2000;
@@ -4895,64 +5279,109 @@ async function main() {
                 break;
                 
             case 'multiswap':
-                wallets = loadWallets();
-                if (wallets.length === 0) throw new Error('No wallets found');
-                tokens = args[2] ? args[2].split(',') : defaultTokens["V2"];
-                startAt = parseInt(args[0]) || 0;
-                endAt = parseInt(args[1]) || wallets.length;
+            wallets = loadWallets();
+            if (wallets.length === 0) throw new Error('No wallets found');
+            
+            // Parse parameters correctly for batch function
+            const batchSizeV2 = parseInt(args[0]) || config.defaultBatchSize || 50;
+            const tokenAddressesV2 = args[1] ? args[1].trim() : null; // comma-separated string
+            const startAtV2 = parseInt(args[2]) || 0;
+            const endAtV2 = parseInt(args[3]) || wallets.length;
+            const delayBetweenBatchesV2 = parseInt(args[4]) || 2000;
+            const delayBetweenTxV2 = parseInt(args[5]) || 100;
 
-                successCount = 0;
-                failCount = 0;
-                
-                for (let i = startAt; i < Math.min(endAt, wallets.length); i++) {
-                    try {
-                        const result = await executeMultiSwap(i, wallets, tokens);
-                        if (result && result.success) {
-                            successCount++;
-                            log(`✅ Wallet ${i}: Success - ${result.tokensSwapped} tokens swapped`);
-                        } else {
-                            failCount++;
-                            log(`❌ Wallet ${i}: Failed - ${result.reason || 'unknown'}`);
-                        }
-                    } catch (err) {
-                        failCount++;
-                        log(`💥 Wallet ${i}: Error - ${err.message}`);
-                    }
-                    await sleep(100);
+            log(`Starting V2 Multi-Swap batch operation:`);
+            log(`• Batch size: ${batchSizeV2}`);
+            log(`• Token addresses: ${tokenAddressesV2 || 'using defaults'}`);
+            log(`• Wallet range: ${startAtV2} to ${endAtV2}`);
+            log(`• Delay between batches: ${delayBetweenBatchesV2}ms`);
+            log(`• Delay between transactions: ${delayBetweenTxV2}ms`);
+
+            try {
+                // Call the batch function once with all parameters
+                const batchResult = await multiSwapV2Batch(
+                    batchSizeV2,
+                    tokenAddressesV2,
+                    startAtV2,
+                    endAtV2,
+                    delayBetweenBatchesV2,
+                    delayBetweenTxV2
+                );
+
+                // Log final results
+                log(`\n🎯 V2 Multi-Swap Batch Operation Complete!`);
+                log(`📊 Results Summary:`);
+                log(`   • Total wallets processed: ${batchResult.totalProcessed}`);
+                log(`   • Successful multi-swaps: ${batchResult.successfulSwaps}`);
+                log(`   • Failed multi-swaps: ${batchResult.failedSwaps}`);
+                log(`   • Gas limit exceeded: ${batchResult.gasLimitExceeded}`);
+                log(`   • Success rate: ${batchResult.successRate}%`);
+                log(`   • Total tokens swapped: ${batchResult.totalTokensSwapped}`);
+                log(`   • Average tokens per successful wallet: ${batchResult.averageTokensPerWallet}`);
+                log(`   • Batches processed: ${batchResult.batchesProcessed}`);
+                log(`   • Router type: ${batchResult.routerType}`);
+
+                if (batchResult.customTokensUsed > 0) {
+                    log(`   • Custom tokens used: ${batchResult.customTokensUsed}`);
                 }
-                
-                log(`Multi-swap range completed: ${successCount} successful, ${failCount} failed`);
-                break;
 
+            } catch (err) {
+                log(`❌ V2 Multi-Swap batch operation failed: ${err.message}`);
+                throw err;
+            }
+            break;
+            
             case 'multiswapV3':
-                    wallets = loadWallets();
-                    if (wallets.length === 0) throw new Error('No wallets found');
-                    tokens = args[2] ? args[2].split(',') : defaultTokens["V3"];
-                    startAt = parseInt(args[0]) || 0;
-                    endAt = parseInt(args[1]) || wallets.length;
-    
-                    successCount = 0;
-                    failCount = 0;
-                    
-                    for (let i = startAt; i < Math.min(endAt, wallets.length); i++) {
-                        try {
-                            const result = await executeMultiSwapV3(i, wallets, tokens);
-                            if (result && result.success) {
-                                successCount++;
-                                log(`✅ Wallet ${i}: Success - ${result.tokensSwapped} tokens swapped`);
-                            } else {
-                                failCount++;
-                                log(`❌ Wallet ${i}: Failed - ${result.reason || 'unknown'}`);
-                            }
-                        } catch (err) {
-                            failCount++;
-                            log(`💥 Wallet ${i}: Error - ${err.message}`);
-                        }
-                        await sleep(100);
-                    }
-                    
-                    log(`Multi-swap range completed: ${successCount} successful, ${failCount} failed`);
-                    break;
+            wallets = loadWallets();
+            if (wallets.length === 0) throw new Error('No wallets found');
+            
+            // Parse parameters correctly for batch function
+            const batchSizeV3 = parseInt(args[0]) || config.defaultBatchSize || 50;
+            const tokenAddressesV3 = args[1] ? args[1].trim() : null; // comma-separated string
+            const startAtV3 = parseInt(args[2]) || 0;
+            const endAtV3 = parseInt(args[3]) || wallets.length;
+            const delayBetweenBatchesV3 = parseInt(args[4]) || 2000;
+            const delayBetweenTxV3 = parseInt(args[5]) || 100;
+
+            log(`Starting V3 Multi-Swap batch operation:`);
+            log(`• Batch size: ${batchSizeV3}`);
+            log(`• Token addresses: ${tokenAddressesV3 || 'using defaults'}`);
+            log(`• Wallet range: ${startAtV3} to ${endAtV3}`);
+            log(`• Delay between batches: ${delayBetweenBatchesV3}ms`);
+            log(`• Delay between transactions: ${delayBetweenTxV3}ms`);
+
+            try {
+                // Call the batch function once with all parameters
+                const batchResult = await multiSwapV3Batch(
+                    batchSizeV3,
+                    tokenAddressesV3,
+                    startAtV3,
+                    endAtV3,
+                    delayBetweenBatchesV3,
+                    delayBetweenTxV3
+                );
+
+                // Log final results
+                log(`\n🎯 V3 Multi-Swap Batch Operation Complete!`);
+                log(`📊 Results Summary:`);
+                log(`   • Total wallets processed: ${batchResult.totalProcessed}`);
+                log(`   • Successful multi-swaps: ${batchResult.successfulSwaps}`);
+                log(`   • Failed multi-swaps: ${batchResult.failedSwaps}`);
+                log(`   • Gas limit exceeded: ${batchResult.gasLimitExceeded}`);
+                log(`   • Success rate: ${batchResult.successRate}%`);
+                log(`   • Total tokens swapped: ${batchResult.totalTokensSwapped}`);
+                log(`   • Average tokens per successful wallet: ${batchResult.averageTokensPerWallet}`);
+                log(`   • Batches processed: ${batchResult.batchesProcessed}`);
+
+                if (batchResult.customTokensUsed > 0) {
+                    log(`   • Custom tokens used: ${batchResult.customTokensUsed}`);
+                }
+
+            } catch (err) {
+                log(`❌ V3 Multi-Swap batch operation failed: ${err.message}`);
+                throw err;
+            }
+            break;
 
             case 'create-and-swap':
                 tokenAddress = args[0] ? args[0].split(',') : defaultTokens["V2"];

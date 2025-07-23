@@ -328,50 +328,73 @@ input[type="radio"][value="no"]:checked {
                 <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
                     ⚡ Trading Operations
                 </h3>
-                <div class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-purple-200 text-sm font-medium mb-2">Single Token</label>
-                            <div class="relative">
-                                <input type="text" id="singleToken" placeholder="0x..."
-                                       class="w-full px-3 py-2 pr-10 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                                <button onclick="openTokenSelector('singleToken')" 
-                                        class="absolute right-2 top-1/2 transform -translate-y-1/2 text-purple-300 hover:text-purple-100 transition-colors">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                    </svg>
+                
+
+                                        
+                    <!-- Multi-Token Trading -->
+                    <div class="bg-white/5 rounded-lg p-4">
+                        <h4 class="text-cyan-300 font-medium mb-4 flex items-center">
+                            🎲 Multi-Token Trading
+                            <span class="ml-2 text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded">Random Selection</span>
+                        </h4>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-cyan-200 text-sm font-medium mb-2">Tokens (comma-separated)</label>
+                                <div class="relative">
+                                    <textarea id="multiTradeTokens" placeholder="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913,0x..."
+                                              class="w-full px-3 py-2 pr-10 bg-white/10 border border-white/20 rounded-lg text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
+                                              rows="3"></textarea>
+                                    <button onclick="openTokenSelector('multiTradeTokens', true)" 
+                                            class="absolute right-2 top-2 text-cyan-300 hover:text-cyan-100 transition-colors">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-cyan-200 text-sm font-medium mb-2">Batch Size</label>
+                                    <input type="number" id="multiTradeBatchSize" placeholder="50" value="50"
+                                           class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                </div>
+                                <div>
+                                    <label class="block text-cyan-200 text-sm font-medium mb-2">TX Delay (ms)</label>
+                                    <input type="number" id="multiTradeTxDelay" placeholder="1500" value="1500"
+                                           class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-cyan-200 text-sm font-medium mb-2">Start Index</label>
+                                    <input type="number" id="multiTradeStartIndex" placeholder="0" value="0"
+                                           class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                </div>
+                                <div>
+                                    <label class="block text-cyan-200 text-sm font-medium mb-2">End Index</label>
+                                    <input type="number" id="multiTradeEndIndex" placeholder="100" value="100"
+                                           class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                </div>
+                            </div>
+                            <div class="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3">
+                                <div class="text-cyan-300 text-xs mb-1">🎲 Multi-Token Flow</div>
+                                <div class="text-cyan-200 text-sm">
+                                    Random token selection for each wallet in batch
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button onclick="startV2SwapBatch()" 
+                                        class="bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                                    🎲 V2 Multi-Swap
+                                </button>
+                                <button onclick="startV3SwapBatch()" 
+                                        class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                                    🎲 V3 Multi-Swap
                                 </button>
                             </div>
-                        </div>
-                        <div>
-                            <label class="block text-purple-200 text-sm font-medium mb-2">Batch Size</label>
-                            <input type="number" id="tradeBatchSize" placeholder="50" value="50"
-                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-purple-200 text-sm font-medium mb-2">Start Index</label>
-                            <input type="number" id="startIndex" placeholder="0" value="0"
-                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                        </div>
-                        <div>
-                            <label class="block text-purple-200 text-sm font-medium mb-2">End Index</label>
-                            <input type="number" id="endIndex" placeholder="100" value="100"
-                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <button onclick="startSwapBatch()" 
-                                class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
-                            🔄 V2 Swap Batch
-                        </button>
-                        <button onclick="startV3SwapBatch()" 
-                                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
-                            ⚡ V3 Swap Batch
-                        </button>
-                    </div>
-                </div>
             </div>
 
             
@@ -2151,26 +2174,52 @@ async function checkWallets() {
 }
 
 // Trading functions
-async function startSwapBatch() {
-    const batchSize = document.getElementById('tradeBatchSize').value || '50';
-    const token = document.getElementById('singleToken').value;
-    const delay = '1000';
+async function startV2SwapBatch() {
+    const batchSize = document.getElementById('multiTradeBatchSize').value || '50';
+    const tokens = document.getElementById('multiTradeTokens').value;
+    const start = document.getElementById('multiTradeStartIndex').value || '0';
+    const end = document.getElementById('multiTradeEndIndex').value || '100';
+    const delayBetweenBatches = document.getElementById('multiTradeTxDelay').value || '1500';
+    const delayBetweenTx = '100'; // Default delay between individual transactions
     
-    const args = [batchSize];
-    if (token) args.push(token);
-    args.push(delay);
+    if (!tokens.trim()) {
+        logToTerminal('❌ Please enter token addresses for V2 multi-token trading', 'error');
+        return;
+    }
     
-    await executeCommand('swap-batch', args, event.target);
+    const tokenList = tokens.split(',').map(addr => addr.trim()).filter(addr => addr);
+    
+    logToTerminal(`🎲 Starting V2 Multi-Swap batch with ${tokenList.length} tokens`, 'info');
+    logToTerminal(`📊 Batch size: ${batchSize}, Wallets: ${start}-${end}`, 'info');
+    logToTerminal(`⏱️  Delays: ${delayBetweenBatches}ms between batches, ${delayBetweenTx}ms between transactions`, 'info');
+    logToTerminal('🎲 Each wallet will randomly select from V2 token pool', 'info');
+    
+    // Use the correct command and parameter order for multiswap (V2)
+    await executeCommand('multiswap', [batchSize, tokens, start, end, delayBetweenBatches, delayBetweenTx], event.target);
 }
 
 async function startV3SwapBatch() {
-    const batchSize = document.getElementById('tradeBatchSize').value || '50';
-    const token = document.getElementById('singleToken').value;
-    const start = document.getElementById('startIndex').value || '0';
-    const end = document.getElementById('endIndex').value || '100';
-    const delay = '2000';
+    const batchSize = document.getElementById('multiTradeBatchSize').value || '50';
+    const tokens = document.getElementById('multiTradeTokens').value;
+    const start = document.getElementById('multiTradeStartIndex').value || '0';
+    const end = document.getElementById('multiTradeEndIndex').value || '100';
+    const delayBetweenBatches = document.getElementById('multiTradeTxDelay').value || '2000';
+    const delayBetweenTx = '100'; // Default delay between individual transactions
     
-    await executeCommand('swapv3-batch', [batchSize, token, start, end, delay], event.target);
+    if (!tokens.trim()) {
+        logToTerminal('❌ Please enter token addresses for V3 multi-token trading', 'error');
+        return;
+    }
+    
+    const tokenList = tokens.split(',').map(addr => addr.trim()).filter(addr => addr);
+    
+    logToTerminal(`🚄 Starting V3 Multi-Swap batch with ${tokenList.length} tokens`, 'info');
+    logToTerminal(`📊 Batch size: ${batchSize}, Wallets: ${start}-${end}`, 'info');
+    logToTerminal(`⏱️  Delays: ${delayBetweenBatches}ms between batches, ${delayBetweenTx}ms between transactions`, 'info');
+    logToTerminal('🎲 Each wallet will randomly select from V3 token pool', 'info');
+    
+    // Use the correct command and parameter order for multiswapV3
+    await executeCommand('multiswapV3', [batchSize, tokens, start, end, delayBetweenBatches, delayBetweenTx], event.target);
 }
 
 // Volume generation functions
@@ -3204,7 +3253,7 @@ async function testRpcConnection() {
  * Calculate gas impact and show estimates
  */
 async function calculateGasImpact() {
-    const gasMax = parseFloat(document.getElementById('settingsGasMax').value) || 0;
+    const gasMax = parseFloat(document.getElementById('settingsGasMax').value).toFixed(4) || 0;
     
     if (gasMax <= 0) {
         document.getElementById('estimatedTxCount').textContent = '--';
@@ -3268,7 +3317,7 @@ function updateGasMaxUsdValue() {
     
     const usdValue = gasMax * ethPrice;
     document.getElementById('gasMaxUsdValue').textContent = 
-        `≈ ${formatNumberCurrency(usdValue)} at current ETH price`;
+        `≈ $${(parseFloat(usdValue).toFixed(4))} at current ETH price`;
 }
 
 /**

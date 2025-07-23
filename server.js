@@ -394,16 +394,54 @@ function validateCommand(command, args) {
         case 'multiswap':
         case 'swapv3':
         case 'multiswapV3':
-            if (args[0] && !isValidNumber(args[0], 0)) {
-                errors.push('Start index must be >= 0');
+    // args[0] = batchSize (must be >= 1)
+    if (args[0] && !isValidNumber(args[0], 1)) {
+        errors.push('Batch size must be >= 1');
+    }
+    
+    // args[1] = tokenAddresses (comma-separated string, optional - can use defaults)
+    if (args[1] && args[1].trim()) {
+        const tokenAddresses = args[1].split(',').map(addr => addr.trim()).filter(addr => addr);
+        for (const tokenAddr of tokenAddresses) {
+            if (!isValidTokenAddress(tokenAddr)) {
+                errors.push(`Invalid token address: ${tokenAddr}`);
             }
-            if (args[1] && !isValidNumber(args[1], 1)) {
-                errors.push('End index must be >= 1');
-            }
-            if (args[2] && command !== 'multiswap' && command !== 'multiswapV3' && !isValidTokenAddress(args[2])) {
-                errors.push('Token address must be a valid Ethereum address');
-            }
-            break;
+        }
+        if (tokenAddresses.length === 0) {
+            errors.push('At least one valid token address required when tokens are specified');
+        }
+    }
+    
+    // args[2] = startAt (must be >= 0)
+    if (args[2] && !isValidNumber(args[2], 0)) {
+        errors.push('Start index must be >= 0');
+    }
+    
+    // args[3] = endAt (must be >= 1 and > startAt if both provided)
+    if (args[3] && !isValidNumber(args[3], 1)) {
+        errors.push('End index must be >= 1');
+    }
+    
+    // Validate startAt < endAt if both provided
+    if (args[2] && args[3]) {
+        const startAt = parseInt(args[2]);
+        const endAt = parseInt(args[3]);
+        if (startAt >= endAt) {
+            errors.push('Start index must be less than end index');
+        }
+    }
+    
+    // args[4] = delayBetweenBatches (must be >= 0 if provided)
+    if (args[4] && !isValidNumber(args[4], 0)) {
+        errors.push('Delay between batches must be >= 0');
+    }
+    
+    // args[5] = delayBetweenTx (must be >= 0 if provided)
+    if (args[5] && !isValidNumber(args[5], 0)) {
+        errors.push('Delay between transactions must be >= 0');
+    }
+    
+    break;
             
         case 'deploy':
         case 'withdraw-token':
