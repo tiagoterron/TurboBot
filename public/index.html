@@ -218,27 +218,27 @@
                     👛 Wallet Management
                 </h3>
                 <div class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 gap-4">
                         <div>
                             <label class="block text-blue-200 text-sm font-medium mb-2">Create Count</label>
                             <input type="number" id="createCount" placeholder="100" value="100"
                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
-                        <div>
+                        <!-- <div>
                             <label class="block text-blue-200 text-sm font-medium mb-2">Target Total</label>
                             <input type="number" id="targetCount" placeholder="1000"
                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
+                        </div> -->
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <button onclick="createWallets()" 
                                 class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
                             ➕ Create Wallets
                         </button>
-                        <button onclick="targetWallets()" 
+                        <!-- <button onclick="targetWallets()" 
                                 class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
                             🎯 Create to Target
-                        </button>
+                        </button> -->
                         <button onclick="checkWallets()" 
                                 class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
                             📊 Check Wallets
@@ -387,7 +387,118 @@
             </div>
         </div>
 
-        <!-- NEW: Airdrop Operations -->
+        <div class="glass rounded-xl p-6 col-span-1 lg:col-span-2">
+            <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
+                🔄 Create & Swap Operations
+                <span class="ml-2 text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded">Infinite Loops</span>
+            </h3>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- V2 Multi-Swap -->
+                <div class="bg-white/5 rounded-lg p-4">
+                    <h4 class="text-purple-300 font-medium mb-4 flex items-center">
+                        🔄 V2 Multi-Swap
+                        <span class="ml-2 text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded">Multiple Tokens</span>
+                    </h4>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-purple-200 text-sm font-medium mb-2">Tokens (comma-separated)</label>
+                            <div class="relative">
+                                <textarea id="createSwapTokens" placeholder="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913,0x..."
+                                          class="w-full px-3 py-2 pr-10 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                                          rows="3"></textarea>
+                                <button onclick="openTokenSelector('createSwapTokens', true)" 
+                                        class="absolute right-2 top-2 text-purple-300 hover:text-purple-100 transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-purple-200 text-sm font-medium mb-2">Cycle Delay (ms)</label>
+                                <input type="number" id="createSwapCycleDelay" placeholder="5000" value="5000"
+                                       class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            </div>
+                            <div>
+                                <label class="block text-purple-200 text-sm font-medium mb-2">Funding Amount</label>
+                                <div class="w-full flex justify-between items-center px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus-within:ring-2 focus-within:ring-purple-500">
+                                    <input type="number" id="createSwapFunding" step="0.00001" placeholder="0.00001" value="0.00001"
+                                           class="bg-transparent outline-none flex-1 text-white placeholder-purple-300 min-w-0">
+                                    <div class="text-purple-300 text-xs ml-2" id="createSwapFundingUsd">$0</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
+                            <div class="text-purple-300 text-xs mb-1">🔄 Operation Flow</div>
+                            <div class="text-purple-200 text-sm">
+                                Create → Fund → Multi-swap V2 → Recover (Infinite)
+                            </div>
+                        </div>
+                        <button onclick="startCreateAndSwap()" 
+                                class="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            🚀 Start V2 Multi-Swap
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- V3 Single Swap -->
+                <!-- V3 Multi-Swap -->
+        <div class="bg-white/5 rounded-lg p-4">
+            <h4 class="text-emerald-300 font-medium mb-4 flex items-center">
+                🚄 V3 Multi-Swap
+                <span class="ml-2 text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded">Multicall</span>
+            </h4>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-emerald-200 text-sm font-medium mb-2">Tokens (comma-separated)</label>
+                    <div class="relative">
+                        <textarea id="createMultiSwapV3Tokens" placeholder="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913,0x..."
+                                  class="w-full px-3 py-2 pr-10 bg-white/10 border border-white/20 rounded-lg text-white placeholder-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                                  rows="3"></textarea>
+                        <button onclick="openTokenSelector('createMultiSwapV3Tokens', true)" 
+                                class="absolute right-2 top-2 text-emerald-300 hover:text-emerald-100 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-emerald-200 text-sm font-medium mb-2">Cycle Delay (ms)</label>
+                        <input type="number" id="createMultiSwapV3CycleDelay" placeholder="6000" value="6000"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-emerald-200 text-sm font-medium mb-2">Funding Amount</label>
+                        <div class="w-full flex justify-between items-center px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus-within:ring-2 focus-within:ring-emerald-500">
+                            <input type="number" id="createMultiSwapV3Funding" step="0.00001" placeholder="0.00001" value="0.00001"
+                                   class="bg-transparent outline-none flex-1 text-white placeholder-emerald-300 min-w-0">
+                            <div class="text-emerald-300 text-xs ml-2" id="createMultiSwapV3FundingUsd">$0</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+                    <div class="text-emerald-300 text-xs mb-1">🚄 Operation Flow</div>
+                    <div class="text-emerald-200 text-sm">
+                        Create → Fund → Multi V3 swap → Recover (Infinite)
+                    </div>
+                </div>
+                <button onclick="startCreateAndMultiSwapV3()" 
+                        class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    🚄 Start V3 Multi-Swap
+                </button>
+            </div>
+        </div>
+    </div>
+            </div>
+            
+
+            <br />
+
+                    <!-- NEW: Airdrop Operations -->
 <div class="glass rounded-xl p-6 col-span-1 lg:col-span-2">
     <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
         🎁 Airdrop Operations
@@ -491,10 +602,40 @@
                 </button>
             </div>
         </div>
+
+
+        <div class="mt-6 bg-white/5 rounded-lg p-4 hidden">
+        <h4 class="text-white font-medium mb-3 flex items-center">
+            📊 Create & Swap Status
+            <span class="ml-2 text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded">Infinite Operations</span>
+        </h4>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div class="text-center">
+                <div class="text-lg font-bold text-blue-400" id="walletsCreated">0</div>
+                <div class="text-blue-200 text-xs">Wallets Created</div>
+            </div>
+            <div class="text-center">
+                <div class="text-lg font-bold text-green-400" id="swapsCompleted">0</div>
+                <div class="text-green-200 text-xs">Swaps Done</div>
+            </div>
+            <div class="text-center">
+                <div class="text-lg font-bold text-yellow-400" id="ethRecovered">0.000</div>
+                <div class="text-yellow-200 text-xs">ETH Recovered</div>
+            </div>
+            <div class="text-center">
+                <div class="text-lg font-bold text-purple-400" id="activeCycles">0</div>
+                <div class="text-purple-200 text-xs">Active Cycles</div>
+            </div>
+            <div class="text-center">
+                <div class="text-lg font-bold text-red-400" id="cycleErrors">0</div>
+                <div class="text-red-200 text-xs">Cycle Errors</div>
+            </div>
+        </div>
     </div>
-    
+    </div>
+    <br />
     <!-- Airdrop Status Panel -->
-    <div class="mt-6 bg-white/5 rounded-lg p-4">
+    <div class="mt-6 bg-white/5 rounded-lg p-4 hidden">
         <h4 class="text-white font-medium mb-3 flex items-center">
             📈 Airdrop Status
         </h4>
@@ -518,6 +659,9 @@
         </div>
     </div>
 </div>
+           
+
+
 <br />
         <!-- Statistics Panel -->
         <div class="glass rounded-xl p-6 mb-6">
@@ -594,6 +738,8 @@
                 <div class="log-entry">─────────────────────────────────────────────</div>
             </div>
         </div>
+
+    </div>
     </div>
 
     <!-- Token Selector Modal -->
@@ -721,6 +867,256 @@ let isMultiSelect = false;
 let selectedTokens = [];
 let allTokensData = [];
 let filteredTokens = [];
+
+
+// Create & Swap stats tracking
+let createSwapStats = {
+    walletsCreated: 0,
+    swapsCompleted: 0,
+    ethRecovered: 0,
+    activeCycles: 0,
+    cycleErrors: 0
+};
+
+// Create & Swap functions
+async function startCreateAndSwap() {
+    const tokens = document.getElementById('createSwapTokens').value;
+    const cycleDelay = document.getElementById('createSwapCycleDelay').value || '5000';
+    const funding = document.getElementById('createSwapFunding').value || '0.00001';
+    
+    if (!tokens.trim()) {
+        logToTerminal('❌ Please enter token addresses for V2 multi-swap', 'error');
+        return;
+    }
+    
+    const tokenList = tokens.split(',').map(addr => addr.trim()).filter(addr => addr);
+    
+    logToTerminal(`🔄 Starting V2 Multi-Swap with ${tokenList.length} tokens`, 'info');
+    logToTerminal(`💰 Funding: ${funding} ETH, Cycle delay: ${cycleDelay}ms`, 'info');
+    logToTerminal('⚠️ This is an INFINITE operation - use emergency stop to halt', 'warning');
+    
+    createSwapStats.activeCycles++;
+    updateCreateSwapStats();
+    
+    await executeCommand('create-and-swap', [tokens, cycleDelay, funding], event.target);
+}
+
+async function startCreateAndSwapV3() {
+    const token = document.getElementById('createSwapV3Token').value;
+    const cycleDelay = document.getElementById('createSwapV3CycleDelay').value || '7000';
+    const funding = document.getElementById('createSwapV3Funding').value || '0.00001';
+    
+    if (!token.trim()) {
+        logToTerminal('❌ Please enter a token address for V3 single swap', 'error');
+        return;
+    }
+    
+    logToTerminal(`⚡ Starting V3 Single Swap with token: ${token.slice(0, 10)}...`, 'info');
+    logToTerminal(`💰 Funding: ${funding} ETH, Cycle delay: ${cycleDelay}ms`, 'info');
+    logToTerminal('⚠️ This is an INFINITE operation with gas validation', 'warning');
+    
+    createSwapStats.activeCycles++;
+    updateCreateSwapStats();
+    
+    await executeCommand('create-and-swapv3', [token, cycleDelay, funding], event.target);
+}
+
+// Update create & swap statistics
+function updateCreateSwapStats() {
+    document.getElementById('walletsCreated').textContent = createSwapStats.walletsCreated;
+    document.getElementById('swapsCompleted').textContent = createSwapStats.swapsCompleted;
+    document.getElementById('ethRecovered').textContent = createSwapStats.ethRecovered.toFixed(6);
+    document.getElementById('activeCycles').textContent = createSwapStats.activeCycles;
+    document.getElementById('cycleErrors').textContent = createSwapStats.cycleErrors;
+}
+
+// Initialize create & swap event listeners
+function initializeCreateSwapListeners() {
+    // Add event listeners for USD updates
+    const fundingInputs = [
+        'createSwapFunding',
+        'createSwapV3Funding', 
+        'createMultiSwapV2Funding',
+        'createMultiSwapV3Funding'
+    ];
+    
+    fundingInputs.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('input', updateCreateSwapUsdDisplays);
+        }
+    });
+    
+    // Initialize USD displays
+    setTimeout(updateCreateSwapUsdDisplays, 500);
+}
+
+// Enhanced parseOutputForStats function (add to existing function)
+function parseCreateSwapOutput(output) {
+    try {
+        // Parse create & swap specific events
+        if (output.match(/create.*wallet/i)) {
+            createSwapStats.walletsCreated++;
+            updateCreateSwapStats();
+        }
+        
+        if (output.match(/swap.*completed|swap.*successful/i)) {
+            createSwapStats.swapsCompleted++;
+            updateCreateSwapStats();
+        }
+        
+        if (output.match(/recovered|recovery/i)) {
+            // Try to extract ETH amount recovered
+            let ethMatch = output.match(/([\d.]+)\s*ETH.*recovered/i);
+            if (ethMatch) {
+                createSwapStats.ethRecovered += parseFloat(ethMatch[1]);
+                updateCreateSwapStats();
+            }
+        }
+        
+        if (output.match(/cycle.*error|error.*cycle/i)) {
+            createSwapStats.cycleErrors++;
+            updateCreateSwapStats();
+        }
+        
+        // Detect when cycles stop
+        if (output.match(/stopped|terminated|killed/i) && output.match(/create.*swap/i)) {
+            createSwapStats.activeCycles = Math.max(0, createSwapStats.activeCycles - 1);
+            updateCreateSwapStats();
+        }
+        
+    } catch (error) {
+        console.log('Error parsing create & swap output:', error);
+    }
+}
+
+// Update the main parseOutputForStats function to include create & swap parsing
+function parseOutputForStatsEnhanced(output) {
+    try {
+        // Existing stats parsing
+        if (output.match(/✅|✓|SUCCESS|successful/i) && output.match(/transaction|tx|swap/i)) {
+            stats.successfulOps++;
+            updateStats();
+        }
+        
+        if (output.match(/❌|✗|FAILED|ERROR|failed/i) && output.match(/transaction|tx|swap/i)) {
+            stats.failedOps++;
+            updateStats();
+        }
+        
+        let gasMatch = output.match(/Gas\s+used:\s*([\d.]+)\s*ETH/i);
+        if (gasMatch) {
+            const gasUsed = parseFloat(gasMatch[1]);
+            stats.totalGasUsed += gasUsed;
+            updateStats();
+        }
+        
+        // Airdrop stats parsing
+        if (output.match(/airdrop/i)) {
+            if (output.match(/✅|✓|SUCCESS|successful|sent/i)) {
+                airdropStats.sent++;
+                let ethMatch = output.match(/([\d.]+)\s*ETH/i);
+                if (ethMatch) {
+                    airdropStats.ethSpent += parseFloat(ethMatch[1]);
+                }
+                updateAirdropStats();
+            }
+            
+            if (output.match(/❌|✗|FAILED|ERROR|failed/i)) {
+                airdropStats.failed++;
+                updateAirdropStats();
+            }
+        }
+        
+        // Create & swap parsing
+        parseCreateSwapOutput(output);
+        
+    } catch (error) {
+        console.log('Error parsing output for stats:', error);
+    }
+}
+
+// Reset create & swap stats function
+function resetCreateSwapStats() {
+    createSwapStats = {
+        walletsCreated: 0,
+        swapsCompleted: 0,
+        ethRecovered: 0,
+        activeCycles: 0,
+        cycleErrors: 0
+    };
+    updateCreateSwapStats();
+    logToTerminal('📊 Create & Swap statistics reset', 'info');
+}
+
+async function startCreateAndMultiSwapV2() {
+    const cycleDelay = document.getElementById('createMultiSwapV2CycleDelay').value || '4000';
+    const funding = document.getElementById('createMultiSwapV2Funding').value || '0.001';
+    
+    logToTerminal(`🔀 Starting V2 Multi-Swap Alternative`, 'info');
+    logToTerminal(`💰 Funding: ${funding} ETH, Cycle delay: ${cycleDelay}ms`, 'info');
+    logToTerminal('⚠️ This is an INFINITE operation with enhanced controls', 'warning');
+    
+    createSwapStats.activeCycles++;
+    updateCreateSwapStats();
+    
+    await executeCommand('create-and-multiswapv2', [cycleDelay, funding], event.target);
+}
+
+async function startCreateAndMultiSwapV3() {
+    const tokens = document.getElementById('createMultiSwapV3Tokens').value;
+    const cycleDelay = document.getElementById('createMultiSwapV3CycleDelay').value || '6000';
+    const funding = document.getElementById('createMultiSwapV3Funding').value || '0.001';
+    
+    if (!tokens.trim()) {
+        logToTerminal('❌ Please enter token addresses for V3 multi-swap', 'error');
+        return;
+    }
+    
+    const tokenList = tokens.split(',').map(addr => addr.trim()).filter(addr => addr);
+    
+    logToTerminal(`🚄 Starting V3 Multi-Swap with ${tokenList.length} tokens`, 'info');
+    logToTerminal(`💰 Funding: ${funding} ETH, Cycle delay: ${cycleDelay}ms`, 'info');
+    logToTerminal('⚠️ This is an INFINITE operation using V3 multicall', 'warning');
+    
+    createSwapStats.activeCycles++;
+    updateCreateSwapStats();
+    
+    await executeCommand('create-and-multiswapv3', [tokens, cycleDelay, funding], event.target);
+}
+
+// Update USD displays for funding amounts
+function updateCreateSwapUsdDisplays() {
+    // Get current ETH price
+    let ethPrice = 0;
+    const ethPriceElement = document.getElementById("ethPrice");
+    if (ethPriceElement && ethPriceElement.textContent) {
+        ethPrice = parseFloat(ethPriceElement.textContent.replace('$', '')) || 0;
+    }
+    
+    // Fallback to dashboard data
+    if (ethPrice === 0 && window.dashboardData?.gasData?.ethPriceUSD) {
+        ethPrice = parseFloat(window.dashboardData.gasData.ethPriceUSD) || 0;
+    }
+    
+    if (ethPrice > 0) {
+        // V2 Multi-Swap
+        const createSwapFunding = parseFloat(document.getElementById('createSwapFunding').value) || 0;
+        document.getElementById('createSwapFundingUsd').textContent = formatNumberCurrency(createSwapFunding * ethPrice);
+        
+        // V3 Single Swap  
+        const createSwapV3Funding = parseFloat(document.getElementById('createSwapV3Funding').value) || 0;
+        document.getElementById('createSwapV3FundingUsd').textContent = formatNumberCurrency(createSwapV3Funding * ethPrice);
+        
+        // V2 Multi Alt
+        const createMultiSwapV2Funding = parseFloat(document.getElementById('createMultiSwapV2Funding').value) || 0;
+        document.getElementById('createMultiSwapV2FundingUsd').textContent = formatNumberCurrency(createMultiSwapV2Funding * ethPrice);
+        
+        // V3 Multi-Swap
+        const createMultiSwapV3Funding = parseFloat(document.getElementById('createMultiSwapV3Funding').value) || 0;
+        document.getElementById('createMultiSwapV3FundingUsd').textContent = formatNumberCurrency(createMultiSwapV3Funding * ethPrice);
+    }
+}
 
 // Token selector functions
 async function openTokenSelector(targetInputId, multiSelect = false) {
