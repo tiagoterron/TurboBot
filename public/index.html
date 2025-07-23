@@ -4,782 +4,558 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TurboBot Web Controller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'bounce-slow': 'bounce 2s infinite',
+                        'spin-slow': 'spin 3s linear infinite',
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .glass-dark {
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-            padding: 20px;
         }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-        }
-
-        .header h1 {
-            color: #4f46e5;
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-
-        .header p {
-            color: #6b7280;
-            font-size: 1.1rem;
-        }
-
-        .status-bar {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-        }
-
-        .status-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px;
-            background: rgba(248, 250, 252, 0.6);
-            border-radius: 8px;
-        }
-
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #ef4444;
-            animation: pulse 2s infinite;
-        }
-
-        .status-dot.connected {
-            background: #10b981;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .gas-calculator {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 25px;
-            border-radius: 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-        }
-
-        .gas-calculator h3 {
-            color: #4f46e5;
-            margin-bottom: 20px;
-            font-size: 1.3rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .gas-info {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .gas-card {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-            padding: 20px;
-            border-radius: 10px;
-            border-left: 4px solid #4f46e5;
-        }
-
-        .gas-card h4 {
-            color: #4f46e5;
-            font-size: 1.1rem;
-            margin-bottom: 10px;
-        }
-
-        .gas-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 5px;
-        }
-
-        .gas-label {
-            color: #6b7280;
-            font-size: 0.9rem;
-        }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .section {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-        }
-
-        .section h3 {
-            color: #4f46e5;
-            margin-bottom: 20px;
-            font-size: 1.3rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .form-group label {
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #374151;
-            font-size: 0.9rem;
-        }
-
-        .form-group input, .form-group select {
-            padding: 12px;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: #4f46e5;
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-        }
-
-        .button-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-        }
-
-        .btn {
-            padding: 12px 16px;
-            border: none;
-            border-radius: 8px;
-            font-weight: 500;
-            cursor: pointer;
+        .card-hover {
             transition: all 0.3s ease;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            text-align: center;
         }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #4f46e5, #7c3aed);
-            color: white;
-        }
-
-        .btn-primary:hover {
+        
+        .card-hover:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.3);
-        }
-
-        .btn-secondary {
-            background: linear-gradient(135deg, #6b7280, #4b5563);
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(107, 114, 128, 0.3);
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
-        }
-
-        .btn-success {
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-        }
-
-        .btn-success:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
-        }
-
-        .btn-warning {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: white;
-        }
-
-        .btn-warning:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(245, 158, 11, 0.3);
-        }
-
-        .emergency-controls {
-            background: rgba(50, 0, 0, 0.8);
-            border: 2px solid rgba(0, 0, 0, 0.5);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-
-        .emergency-controls h3 {
-            color: #dc2626;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .kill-button {
-            background: linear-gradient(135deg, #dc2626, #b91c1c);
-            color: white;
-            padding: 15px 25px;
-            font-size: 16px;
-            font-weight: 600;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            width: 100%;
-            justify-content: center;
-        }
-
-        .kill-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(220, 38, 38, 0.4);
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .stat-card {
-            background: rgba(255, 255, 255, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-        }
-
-        .stat-value {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: #4f46e5;
-            margin-bottom: 5px;
-        }
-
-        .stat-label {
-            color: #6b7280;
-            font-size: 0.85rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
         }
 
         .terminal {
+            font-family: 'Courier New', monospace;
             background: #1a1a1a;
             color: #00ff00;
-            padding: 20px;
-            border-radius: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            height: 400px;
-            overflow-y: auto;
-            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3);
-            grid-column: 1 / -1;
         }
 
-        .terminal::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .terminal::-webkit-scrollbar-track {
-            background: #2a2a2a;
-        }
-
-        .terminal::-webkit-scrollbar-thumb {
-            background: #4a4a4a;
-            border-radius: 4px;
-        }
-
-        .log-entry {
-            margin-bottom: 5px;
-            padding: 2px 0;
-        }
-
-        .log-success {
-            color: #10b981;
-        }
-
-        .log-error {
-            color: #ef4444;
-        }
-
-        .log-warning {
-            color: #f59e0b;
-        }
-
-        .log-info {
-            color: #3b82f6;
-        }
-
-        .loading {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .loading.show {
-            display: flex;
-        }
-
-        .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid #4f46e5;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .alert-info {
-            background: rgba(59, 130, 246, 0.1);
-            color: #1e40af;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .alert-warning {
-            background: rgba(245, 158, 11, 0.1);
-            color: #92400e;
-            border: 1px solid rgba(245, 158, 11, 0.2);
-        }
-
-        .alert-danger {
-            background: rgba(239, 68, 68, 0.1);
-            color: #dc2626;
-            border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-
-        .full-width {
-            grid-column: 1 / -1;
-        }
-
-        @media (max-width: 1200px) {
-            .main-content {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 768px) {
-            body {
-                padding: 10px;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .button-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .gas-info {
-                grid-template-columns: 1fr;
-            }
-        }
+        .log-success { color: #10b981; }
+        .log-error { color: #ef4444; }
+        .log-warning { color: #f59e0b; }
+        .log-info { color: #3b82f6; }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🚀 TurboBot Web Controller</h1>
-            <p>Enhanced DeFi Automation Tool with Gas Management & V3 Support</p>
+<body class="gradient-bg min-h-screen">
+    <div class="container mx-auto px-4 py-6 max-w-7xl">
+        <!-- Header -->
+        <div class="glass rounded-xl p-6 mb-6 text-center">
+            <h1 class="text-4xl font-bold text-white mb-2">
+                🚀 TurboBot Web Controller
+            </h1>
+            <p class="text-blue-100 text-lg">
+                Enhanced DeFi Automation Tool with Gas Management & V3 Support
+            </p>
         </div>
 
-        <div class="status-bar">
-            <div class="status-item">
-                <div class="status-dot" id="connectionStatus"></div>
-                <span id="connectionText">Disconnected</span>
-            </div>
-            <div class="status-item">
-                <span>🔥 Gas: <strong id="gasPrice">-- Gwei</strong></span>
-            </div>
-            <div class="status-item">
-                <span>💰 ETH: <strong id="ethPrice">$--</strong></span>
-            </div>
-            <div class="status-item">
-                <span>⚡ Active: <strong id="activeOps">0</strong></span>
-            </div>
-            <div class="status-item">
-                <span>👛 Wallets: <strong id="totalWallets">0</strong></span>
-            </div>
-        </div>
-
-        <div class="gas-calculator">
-            <h3>⛽ Gas Cost Calculator</h3>
-            <div class="gas-info">
-                <div class="gas-card">
-                    <h4>Current Gas Price</h4>
-                    <div class="gas-value" id="currentGasGwei">-- Gwei</div>
-                    <div class="gas-label">Network average</div>
+        <!-- Status Bar -->
+        <div class="glass rounded-xl p-6 mb-6">
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div class="flex items-center space-x-3 p-3 bg-white/10 rounded-lg">
+                    <div id="connectionStatus" class="w-3 h-3 rounded-full bg-red-500 animate-pulse-slow"></div>
+                    <span id="connectionText" class="text-white font-medium">Connecting...</span>
                 </div>
-                <div class="gas-card">
-                    <h4>Average</h4>
-                    <div class="gas-value" id="costPerTx">$--</div>
-                    <div class="gas-label">21,000 gas limit</div>
+                <div class="flex items-center space-x-3 p-3 bg-white/10 rounded-lg">
+                    <span class="text-2xl">⛽</span>
+                    <div>
+                        <div class="text-white font-medium" id="gasPrice">-- Gwei</div>
+                        <div class="text-blue-200 text-xs">Gas Price</div>
+                    </div>
                 </div>
-                <div class="gas-card">
-                    <h4>1000 Transfers</h4>
-                    <div class="gas-value" id="cost1000Tx">$--</div>
-                    <div class="gas-label">Simple transfers</div>
+                <div class="flex items-center space-x-3 p-3 bg-white/10 rounded-lg">
+                    <span class="text-2xl">💰</span>
+                    <div>
+                        <div class="text-white font-medium" id="ethPrice">$--</div>
+                        <div class="text-blue-200 text-xs">ETH Price</div>
+                    </div>
                 </div>
-                <div class="gas-card">
-                    <h4>1000 Swaps</h4>
-                    <div class="gas-value" id="cost1000Swaps">$--</div>
-                    <div class="gas-label">~200k gas each</div>
+                <div class="flex items-center space-x-3 p-3 bg-white/10 rounded-lg">
+                    <span class="text-2xl">👛</span>
+                    <div>
+                        <div class="text-white font-medium" id="totalWallets">--</div>
+                        <div class="text-blue-200 text-xs">Wallets</div>
+                    </div>
                 </div>
-                <div class="gas-card">
-                    <h4>Recommended Gas</h4>
-                    <div class="gas-value" id="recommendedGas">-- Gwei</div>
-                    <div class="gas-label">For fast confirmation</div>
+                <div class="flex items-center space-x-3 p-3 bg-white/10 rounded-lg">
+                    <span class="text-2xl">🪙</span>
+                    <div>
+                        <div class="text-white font-medium" id="totalTokens">--</div>
+                        <div class="text-blue-200 text-xs">Tokens</div>
+                    </div>
                 </div>
-                <div class="gas-card">
-                    <h4>Network Status</h4>
-                    <div class="gas-value" id="networkStatus">--</div>
-                    <div class="gas-label">Congestion level</div>
+                <div class="flex items-center space-x-3 p-3 bg-white/10 rounded-lg">
+                    <span class="text-2xl">⚡</span>
+                    <div>
+                        <div class="text-white font-medium" id="activeOps">0</div>
+                        <div class="text-blue-200 text-xs">Active</div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="emergency-controls">
-            <h3>🚨 Emergency Controls</h3>
-            <div class="alert alert-danger">
-                <span>⚠️</span>
-                <span>Use this button to immediately terminate all running processes and automation.</span>
+        <!-- Dashboard Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <!-- Main Wallet Card -->
+            <div class="glass rounded-xl p-6 card-hover">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-white font-semibold text-lg">💼 Main Wallet</h3>
+                    <button onclick="refreshMainWallet()" class="text-blue-300 hover:text-blue-100 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="mainWalletContent" class="space-y-3">
+                    <div class="text-blue-200 text-sm">Loading...</div>
+                </div>
             </div>
-            <button class="kill-button" onclick="killAllProcesses()">
+
+            <!-- Wallet Stats Card -->
+            <div class="glass rounded-xl p-6 card-hover">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-white font-semibold text-lg">📊 Wallet Stats</h3>
+                    <button onclick="refreshWalletStats()" class="text-green-300 hover:text-green-100 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="walletStatsContent" class="space-y-3">
+                    <div class="text-green-200 text-sm">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Token Database Card -->
+            <div class="glass rounded-xl p-6 card-hover">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-white font-semibold text-lg">🪙 Token Database</h3>
+                    <button onclick="showTokenManager()" class="text-yellow-300 hover:text-yellow-100 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="tokenStatsContent" class="space-y-3">
+                    <div class="text-yellow-200 text-sm">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Gas Tracker Card -->
+            <div class="glass rounded-xl p-6 card-hover">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-white font-semibold text-lg">⛽ Gas Tracker</h3>
+                    <button onclick="refreshGasData()" class="text-red-300 hover:text-red-100 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="gasStatsContent" class="space-y-3">
+                    <div class="text-red-200 text-sm">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gas Calculator -->
+        <div class="glass rounded-xl p-6 mb-6">
+            <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
+                ⛽ Gas Cost Calculator
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white/10 rounded-lg p-4">
+                    <h4 class="text-blue-300 font-medium mb-2">Current Gas</h4>
+                    <div class="text-2xl font-bold text-white" id="currentGasGwei">-- Gwei</div>
+                    <div class="text-blue-200 text-sm">Network average</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4">
+                    <h4 class="text-green-300 font-medium mb-2">1000 Transfers</h4>
+                    <div class="text-2xl font-bold text-white" id="cost1000Tx">$--</div>
+                    <div class="text-green-200 text-sm">Simple transfers</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4">
+                    <h4 class="text-yellow-300 font-medium mb-2">1000 Swaps</h4>
+                    <div class="text-2xl font-bold text-white" id="cost1000Swaps">$--</div>
+                    <div class="text-yellow-200 text-sm">~200k gas each</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4">
+                    <h4 class="text-red-300 font-medium mb-2">Network Status</h4>
+                    <div class="text-2xl font-bold text-white" id="networkStatus">--</div>
+                    <div class="text-red-200 text-sm">Congestion level</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Emergency Controls -->
+        <div class="bg-red-900/30 border border-red-500/50 rounded-xl p-6 mb-6">
+            <h3 class="text-red-400 font-semibold text-lg mb-4 flex items-center">
+                🚨 Emergency Controls
+            </h3>
+            <div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 mb-4">
+                <div class="flex items-center space-x-2 text-red-300">
+                    <span>⚠️</span>
+                    <span>Use this button to immediately terminate all running processes and automation.</span>
+                </div>
+            </div>
+            <button onclick="killAllProcesses()" 
+                    class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg">
                 💀 KILL ALL PROCESSES
             </button>
         </div>
 
-        <div class="main-content">
-            <!-- Setup & Configuration -->
-            <div class="section">
-                <h3>🔧 Setup & Configuration</h3>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>RPC URL</label>
-                        <input type="text" id="rpcUrl" placeholder="https://base-mainnet.g.alchemy.com/v2/API_KEY">
-                    </div>
-                    <div class="form-group">
-                        <label>Gas Max (ETH)</label>
-                        <input type="number" id="gasMax" step="0.000001" placeholder="0.0001">
-                    </div>
-                </div>
-                <div class="button-grid">
-                    <button class="btn btn-primary" onclick="executeCommand('setup', [], event.target)">
-                        🚀 Run Setup
-                    </button>
-                    <button class="btn btn-secondary" onclick="executeCommand('update', [], event.target)">
-                        📥 Update Scripts
-                    </button>
-                    <button class="btn btn-secondary" onclick="updateConfig()">
-                        💾 Save Config
-                    </button>
-                </div>
-            </div>
-
+        <!-- Main Controls Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <!-- Wallet Management -->
-            <div class="section">
-                <h3>👛 Wallet Management</h3>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Create Count</label>
-                        <input type="number" id="createCount" placeholder="100" value="100">
+            <div class="glass rounded-xl p-6">
+                <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
+                    👛 Wallet Management
+                </h3>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-blue-200 text-sm font-medium mb-2">Create Count</label>
+                            <input type="number" id="createCount" placeholder="100" value="100"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-blue-200 text-sm font-medium mb-2">Target Total</label>
+                            <input type="number" id="targetCount" placeholder="1000"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Target Total</label>
-                        <input type="number" id="targetCount" placeholder="1000">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button onclick="createWallets()" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            ➕ Create Wallets
+                        </button>
+                        <button onclick="targetWallets()" 
+                                class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            🎯 Create to Target
+                        </button>
+                        <button onclick="checkWallets()" 
+                                class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            📊 Check Wallets
+                        </button>
                     </div>
-                </div>
-                <div class="button-grid">
-                    <button class="btn btn-primary" onclick="createWallets()">
-                        ➕ Create Wallets
-                    </button>
-                    <button class="btn btn-primary" onclick="targetWallets()">
-                        🎯 Create to Target
-                    </button>
-                    <button class="btn btn-secondary" onclick="checkWallets()">
-                        📊 Check Wallets
-                    </button>
                 </div>
             </div>
 
-            <!-- Airdrop Configuration -->
-            <div class="section">
-                <h3>💸 Airdrop Configuration</h3>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Chunk Size</label>
-                        <input type="number" id="airdropChunk" placeholder="500" value="500">
+            <!-- Token Management -->
+            <div class="glass rounded-xl p-6">
+                <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
+                    🪙 Token Management
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-yellow-200 text-sm font-medium mb-2">Token Addresses (comma-separated)</label>
+                        <div class="relative">
+                            <textarea id="tokenAddresses" placeholder="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913,0x..."
+                                      class="w-full px-3 py-2 pr-10 bg-white/10 border border-white/20 rounded-lg text-white placeholder-yellow-300 focus:outline-none focus:ring-2 focus:ring-yellow-500 resize-none"
+                                      rows="3"></textarea>
+                            <button onclick="openTokenSelector('tokenAddresses', true)" 
+                                    class="absolute right-2 top-2 text-yellow-300 hover:text-yellow-100 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Total ETH</label>
-                        <input type="number" id="airdropTotal" step="0.001" placeholder="0.1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button onclick="addTokens()" 
+                                class="bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            ➕ Add Tokens
+                        </button>
+                        <button onclick="viewTokenDatabase()" 
+                                class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            📚 View Database
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label>Delay (ms)</label>
-                        <input type="number" id="airdropDelay" placeholder="3000" value="3000">
-                    </div>
-                </div>
-                <div class="button-grid">
-                    <button class="btn btn-success" onclick="startAirdrop()">
-                        💰 Start Airdrop
-                    </button>
                 </div>
             </div>
 
             <!-- Trading Operations -->
-            <div class="section">
-                <h3>⚡ Trading Operations</h3>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Single Token</label>
-                        <input type="text" id="singleToken" placeholder="0x...">
+            <div class="glass rounded-xl p-6">
+                <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
+                    ⚡ Trading Operations
+                </h3>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-purple-200 text-sm font-medium mb-2">Single Token</label>
+                            <div class="relative">
+                                <input type="text" id="singleToken" placeholder="0x..."
+                                       class="w-full px-3 py-2 pr-10 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                <button onclick="openTokenSelector('singleToken')" 
+                                        class="absolute right-2 top-1/2 transform -translate-y-1/2 text-purple-300 hover:text-purple-100 transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-purple-200 text-sm font-medium mb-2">Batch Size</label>
+                            <input type="number" id="tradeBatchSize" placeholder="50" value="50"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Multi Tokens (comma-separated)</label>
-                        <input type="text" id="multiTokens" placeholder="0x...,0x...,0x...">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-purple-200 text-sm font-medium mb-2">Start Index</label>
+                            <input type="number" id="startIndex" placeholder="0" value="0"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div>
+                            <label class="block text-purple-200 text-sm font-medium mb-2">End Index</label>
+                            <input type="number" id="endIndex" placeholder="100" value="100"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Batch Size</label>
-                        <input type="number" id="tradeBatchSize" placeholder="50" value="50">
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="startSwapBatch()" 
+                                class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            🔄 V2 Swap Batch
+                        </button>
+                        <button onclick="startV3SwapBatch()" 
+                                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            ⚡ V3 Swap Batch
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label>Start Index</label>
-                        <input type="number" id="startIndex" placeholder="0" value="0">
-                    </div>
-                    <div class="form-group">
-                        <label>End Index</label>
-                        <input type="number" id="endIndex" placeholder="100" value="100">
-                    </div>
-                </div>
-                <div class="button-grid">
-                    <button class="btn btn-primary" onclick="startSwapBatch()">
-                        🔄 V2 Swap Batch
-                    </button>
-                    <button class="btn btn-primary" onclick="startMultiSwapBatch()">
-                        🔄 V2 Multi-Swap
-                    </button>
-                    <button class="btn btn-secondary" onclick="startV3SwapBatch()">
-                        ⚡ V3 Swap Batch
-                    </button>
-                    <button class="btn btn-secondary" onclick="individualSwap()">
-                        🔄 V2 Swap Range
-                    </button>
                 </div>
             </div>
 
             <!-- Volume Generation -->
-            <div class="section">
-                <h3>🔥 Volume Generation</h3>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Volume Token</label>
-                        <input type="text" id="volumeToken" placeholder="0x...">
+            <div class="glass rounded-xl p-6">
+                <h3 class="text-white font-semibold text-xl mb-6 flex items-center">
+                    🔥 Volume Generation
+                </h3>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-orange-200 text-sm font-medium mb-2">Volume Token</label>
+                            <div class="relative">
+                                <input type="text" id="volumeToken" placeholder="0x..."
+                                       class="w-full px-3 py-2 pr-10 bg-white/10 border border-white/20 rounded-lg text-white placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                                <button onclick="openTokenSelector('volumeToken')" 
+                                        class="absolute right-2 top-1/2 transform -translate-y-1/2 text-orange-300 hover:text-orange-100 transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-orange-200 text-sm font-medium mb-2">TX Delay (ms)</label>
+                            <input type="number" id="volumeTxDelay" placeholder="150" value="150"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>TX Delay (ms)</label>
-                        <input type="number" id="volumeTxDelay" placeholder="150" value="150">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-orange-200 text-sm font-medium mb-2">Cycle Delay (ms)</label>
+                            <input type="number" id="volumeCycleDelay" placeholder="3000" value="3000"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        </div>
+                        <div>
+                            <label class="block text-orange-200 text-sm font-medium mb-2">Funding Amount</label>
+                            <input type="number" id="fundingAmount" step="0.000001" placeholder="0.00001" value="0.00001"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Cycle Delay (ms)</label>
-                        <input type="number" id="volumeCycleDelay" placeholder="3000" value="3000">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button onclick="startVolumeV2()" 
+                                class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            📈 V2 Volume
+                        </button>
+                        <button onclick="startVolumeV3()" 
+                                class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            📈 V3 Volume
+                        </button>
+                        <button onclick="startVolumeV3Fresh()" 
+                                class="bg-pink-600 hover:bg-pink-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                            🆕 V3 Fresh
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label>Funding Amount</label>
-                        <input type="number" id="fundingAmount" step="0.000001" placeholder="0.00001" value="0.00001">
-                    </div>
-                </div>
-                <div class="button-grid">
-                    <button class="btn btn-warning" onclick="startVolumeV2()">
-                        📈 V2 Volume Bot
-                    </button>
-                    <button class="btn btn-warning" onclick="startVolumeV3()">
-                        📈 V3 Volume Bot
-                    </button>
-                    <button class="btn btn-warning" onclick="startVolumeV3Fresh()">
-                        🆕 V3 Fresh Volume
-                    </button>
-                </div>
-            </div>
-
-            <!-- Automation -->
-            <div class="section">
-                <h3>🔄 Automation</h3>
-                <div class="alert alert-warning">
-                    <span>⚠️</span>
-                    <span>These operations run continuously until stopped.</span>
-                </div>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Cycle Delay (ms)</label>
-                        <input type="number" id="cycleDelay" placeholder="2000" value="2000">
-                    </div>
-                </div>
-                <div class="button-grid">
-                    <button class="btn btn-success" onclick="startCreateAndSwap()">
-                        🆕 Create & V2 Multi-Swap
-                    </button>
-                    <button class="btn btn-success" onclick="startCreateAndSwapV3()">
-                        🆕 Create & V3 Swap
-                    </button>
-                    <button class="btn btn-success" onclick="startCreateAndMultiSwapV3()">
-                        🆕 Create & V3 Multi-Swap
-                    </button>
-                    <button class="btn btn-danger" onclick="stopAutomation()">
-                        🛑 Stop Automation
-                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- Statistics -->
-        <div class="section full-width">
-            <h3>📊 Statistics & Monitoring</h3>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="successfulOps">0</div>
-                    <div class="stat-label">Successful Operations</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="failedOps">0</div>
-                    <div class="stat-label">Failed Operations</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="totalGasUsed">0.000</div>
-                    <div class="stat-label">Total Gas Used (ETH)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="successRate">0%</div>
-                    <div class="stat-label">Success Rate</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="fundedWallets">0</div>
-                    <div class="stat-label">Funded Wallets</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="totalBalance">0.000</div>
-                    <div class="stat-label">Total ETH Balance</div>
-                </div>
+        <!-- Statistics Panel -->
+        <div class="glass rounded-xl p-6 mb-6">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-white font-semibold text-xl">📊 Live Statistics</h3>
+                <button onclick="refreshAllStats()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    🔄 Refresh All
+                </button>
             </div>
-            <div class="button-grid">
-                <button class="btn btn-secondary" onclick="refreshStats()">
-                    🔄 Refresh Stats
-                </button>
-                <button class="btn btn-secondary" onclick="exportLogs()">
-                    📥 Export Logs
-                </button>
-                <button class="btn btn-secondary" onclick="clearTerminal()">
-                    🗑️ Clear Terminal
-                </button>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div class="bg-white/10 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-green-400" id="successfulOps">0</div>
+                    <div class="text-green-200 text-sm">Successful</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-red-400" id="failedOps">0</div>
+                    <div class="text-red-200 text-sm">Failed</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-blue-400" id="successRate">0%</div>
+                    <div class="text-blue-200 text-sm">Success Rate</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-purple-400" id="totalGasUsed">0.000</div>
+                    <div class="text-purple-200 text-sm">Gas Used (ETH)</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-yellow-400" id="fundedWallets">0</div>
+                    <div class="text-yellow-200 text-sm">Funded Wallets</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-indigo-400" id="totalBalance">0.000</div>
+                    <div class="text-indigo-200 text-sm">Total Balance</div>
+                </div>
             </div>
         </div>
-<br />
+
         <!-- Terminal Output -->
-        <div class="section full-width">
-            <h3>🖥️ Terminal Output</h3>
-            <div class="terminal" id="terminal">
-                <div class="log-entry log-info">TurboBot Web Controller v2.0 - Ready</div>
-                <div class="log-entry">All controls consolidated into a single clean interface</div>
+        <div class="glass rounded-xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white font-semibold text-xl">🖥️ Terminal Output</h3>
+                <div class="flex space-x-2">
+                    <button onclick="clearTerminal()" 
+                            class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm">
+                        🗑️ Clear
+                    </button>
+                    <button onclick="exportLogs()" 
+                            class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm">
+                        📥 Export
+                    </button>
+                </div>
+            </div>
+            <div id="terminal" class="terminal rounded-lg p-4 h-80 overflow-y-auto text-sm">
+                <div class="log-entry log-info">TurboBot Web Controller v3.0 - Ready</div>
+                <div class="log-entry">Enhanced with real-time API integration</div>
                 <div class="log-entry">─────────────────────────────────────────────</div>
             </div>
         </div>
     </div>
 
-    <!-- Loading Overlay -->
-    <div class="loading" id="loading">
-        <div class="loading-spinner"></div>
+    <!-- Token Selector Modal -->
+    <div id="tokenSelectorModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="glass rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-white font-semibold text-xl">🪙 Select Token(s)</h3>
+                <button onclick="hideTokenSelector()" class="text-white hover:text-red-300 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div id="applytokenselected" class="flex justify-between items-center my-10 pt-4 border-t border-white/20 hidden">
+                <div class="text-gray-300 text-sm">
+                    <span id="selectedCount">0</span> token(s) selected
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="hideTokenSelector()" 
+                            class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors">
+                        Cancel
+                    </button>
+                    <button onclick="applyTokenSelection()" 
+                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        Apply Selection
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Search and Filter -->
+            <div class="mb-4 space-y-4">
+                <div class="flex space-x-4">
+                    <div class="flex-1">
+                        <input type="text" id="tokenSearch" placeholder="Search by symbol, name, or address..."
+                               class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <button onclick="clearTokenSearch()" 
+                            class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors">
+                        Clear
+                    </button>
+                </div>
+                
+                <!-- Default tokens quick select -->
+                <div class="flex flex-wrap gap-2">
+                    <span class="text-gray-300 text-sm">Quick select:</span>
+                    <button onclick="selectDefaultTokens('V2')" 
+                            class="px-3 py-1 bg-blue-600/50 hover:bg-blue-600 text-white text-sm rounded-lg transition-colors">
+                        Default V2 Tokens
+                    </button>
+                    <button onclick="selectDefaultTokens('V3')" 
+                            class="px-3 py-1 bg-purple-600/50 hover:bg-purple-600 text-white text-sm rounded-lg transition-colors">
+                        Default V3 Tokens
+                    </button>
+                </div>
+            </div>
+
+            <!-- Token List -->
+            <div id="tokenSelectorContent" class="overflow-y-auto max-h-96 space-y-2">
+                <!-- Token list will be populated here -->
+            </div>
+            
+            <!-- Selected tokens display -->
+            <div id="selectedTokensDisplay" class="mt-4 hidden">
+                <div class="text-white font-medium mb-2">Selected Tokens:</div>
+                <div id="selectedTokensList" class="flex flex-wrap gap-2 mb-4">
+                    <!-- Selected tokens will appear here -->
+                </div>
+            </div>
+            
+            <!-- Action buttons -->
+            
+        </div>
     </div>
 
+    <!-- Token Manager Modal -->
+    <div id="tokenModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-40 flex items-center justify-center p-4">
+        <div class="glass rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-white font-semibold text-xl">🪙 Token Database Manager</h3>
+                <button onclick="hideTokenManager()" class="text-white hover:text-red-300 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="tokenModalContent" class="overflow-y-auto max-h-96">
+                <!-- Token list will be populated here -->
+            </div>
+    <!-- Loading Overlay -->
+    <div id="loading" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-30 flex items-center justify-center">
+        <div class="bg-white/10 rounded-xl p-8 flex items-center space-x-4">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            <span class="text-white font-medium">Processing...</span>
+        </div>
+    </div>
     <script>
 // Global state management
 let automationProcesses = new Set();
@@ -795,11 +571,304 @@ let stats = {
     totalBalance: 0
 };
 
-// Gas price tracking
-let gasData = {
-    currentPrice: 0,
-    ethPrice: 0
-};
+// Token selector state
+let currentTargetInput = null;
+let isMultiSelect = false;
+let selectedTokens = [];
+let allTokensData = [];
+let filteredTokens = [];
+
+// Token selector functions
+async function openTokenSelector(targetInputId, multiSelect = false) {
+    currentTargetInput = targetInputId;
+    isMultiSelect = multiSelect;
+    selectedTokens = [];
+    
+    // Load tokens if not already loaded
+    if (!allTokensData.length) {
+        await loadTokensForSelector();
+    }
+    
+    // If multiSelect, parse existing tokens from input
+    if (multiSelect) {
+        const currentValue = document.getElementById(targetInputId).value;
+        if (currentValue.trim()) {
+            selectedTokens = currentValue.split(',').map(addr => addr.trim()).filter(addr => addr);
+        }
+    }
+    
+    filteredTokens = [...allTokensData];
+    displayTokenSelector();
+    updateSelectedTokensDisplay();
+    document.getElementById('tokenSelectorModal').classList.remove('hidden');
+}
+
+function hideTokenSelector() {
+    document.getElementById('tokenSelectorModal').classList.add('hidden');
+    currentTargetInput = null;
+    isMultiSelect = false;
+    selectedTokens = [];
+    document.getElementById('tokenSearch').value = '';
+}
+
+async function loadTokensForSelector() {
+    try {
+        showLoading(true);
+        
+        // Load from database
+        const response = await fetch('/api/tokens');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                allTokensData = data.tokens;
+            }
+        }
+        
+        // Also load default tokens
+        const defaultResponse = await fetch('/api/tokens/defaults');
+        if (defaultResponse.ok) {
+            const defaultData = await defaultResponse.json();
+            if (defaultData.success) {
+                // Add default tokens that might not be in database
+                const defaultTokens = [
+                    ...defaultData.v2Tokens.map(addr => ({ address: addr, symbol: 'V2 Token', isDefault: true, type: 'V2' })),
+                    ...defaultData.v3Tokens.map(addr => ({ address: addr, symbol: 'V3 Token', isDefault: true, type: 'V3' }))
+                ];
+                
+                // Add defaults that aren't already in the database
+                defaultTokens.forEach(defaultToken => {
+                    if (!allTokensData.find(token => token.address.toLowerCase() === defaultToken.address.toLowerCase())) {
+                        allTokensData.push(defaultToken);
+                    }
+                });
+            }
+        }
+        
+        logToTerminal(`📚 Loaded ${allTokensData.length} tokens for selection`, 'info');
+        
+    } catch (error) {
+        logToTerminal(`❌ Failed to load tokens: ${error.message}`, 'error');
+        allTokensData = [];
+    } finally {
+        showLoading(false);
+    }
+}
+
+function displayTokenSelector() {
+    const content = document.getElementById('tokenSelectorContent');
+    
+    if (!filteredTokens.length) {
+        content.innerHTML = `
+            <div class="text-center py-8">
+                <div class="text-gray-400 text-lg mb-4">No tokens found</div>
+                <div class="text-gray-500">Try adjusting your search criteria</div>
+            </div>
+        `;
+        return;
+    }
+    
+    content.innerHTML = filteredTokens.map(token => {
+        const isSelected = selectedTokens.includes(token.address);
+        const displayName = token.name || token.symbol || 'Unknown Token';
+        const displaySymbol = token.symbol || 'N/A';
+        
+        return `
+            <div class="flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-lg cursor-pointer transition-colors ${isSelected ? 'ring-2 ring-blue-500 bg-blue-500/20' : ''}"
+                 onclick="toggleTokenSelection('${token.address}')">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex-shrink-0">
+                            ${isMultiSelect ? `
+                                <div class="w-5 h-5 rounded border-2 ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-400'} flex items-center justify-center">
+                                    ${isSelected ? '<svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' : ''}
+                                </div>
+                            ` : `
+                                <div class="w-5 h-5 rounded-full ${isSelected ? 'bg-blue-500' : 'bg-gray-400'}"></div>
+                            `}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center space-x-2 mb-1">
+                                <div class="text-white font-medium">${displaySymbol}</div>
+                                ${token.decimals ? `<div class="text-gray-400 text-xs">${token.decimals} decimals</div>` : ''}
+                                ${token.isDefault ? `<div class="px-2 py-1 bg-blue-500/30 text-blue-300 text-xs rounded">${token.type || 'Default'}</div>` : ''}
+                            </div>
+                            <div class="text-gray-300 text-sm mb-1">${displayName}</div>
+                            <div class="text-gray-400 text-xs font-mono break-all">${token.address}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-shrink-0 ml-3">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleTokenSelection(address) {
+    if (isMultiSelect) {
+        const index = selectedTokens.indexOf(address);
+        if (index > -1) {
+            selectedTokens.splice(index, 1);
+        } else {
+            selectedTokens.push(address);
+        }
+        displayTokenSelector();
+        updateSelectedTokensDisplay();
+    } else {
+        selectedTokens = [address];
+        displayTokenSelector();
+        updateSelectedTokensDisplay();
+    }
+}
+
+function updateSelectedTokensDisplay() {
+    const countElement = document.getElementById('selectedCount');
+    const displayElement = document.getElementById('selectedTokensDisplay');
+    const listElement = document.getElementById('selectedTokensList');
+    const applyButton = document.getElementById('applytokenselected');
+    
+    countElement.textContent = selectedTokens.length;
+    
+    if (selectedTokens.length > 0) {
+        displayElement.classList.remove('hidden');
+        applyButton.classList.remove('hidden');
+        
+        listElement.innerHTML = selectedTokens.map(address => {
+            const token = allTokensData.find(t => t.address === address);
+            const displayText = token ? (token.symbol || token.name || address.slice(0, 8) + '...') : address.slice(0, 8) + '...';
+            
+            return `
+                <div class="flex items-center space-x-2 px-3 py-1 bg-blue-500/30 text-blue-200 rounded-lg">
+                    <span class="text-sm">${displayText}dd</span>
+                    <button onclick="removeSelectedToken('${address}')" class="text-blue-300 hover:text-white">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        }).join('');
+    } else {
+        displayElement.classList.add('hidden');
+        applyButton.classList.add('hidden');
+    }
+    
+}
+
+function removeSelectedToken(address) {
+    const index = selectedTokens.indexOf(address);
+    if (index > -1) {
+        selectedTokens.splice(index, 1);
+        displayTokenSelector();
+        updateSelectedTokensDisplay();
+    }
+}
+
+function applyTokenSelection() {
+    if (!currentTargetInput || selectedTokens.length === 0) {
+        hideTokenSelector();
+        return;
+    }
+    
+    const targetElement = document.getElementById(currentTargetInput);
+    
+    if (isMultiSelect) {
+        targetElement.value = selectedTokens.join(',');
+        logToTerminal(`✅ Selected ${selectedTokens.length} tokens`, 'success');
+    } else {
+        targetElement.value = selectedTokens[0];
+        const token = allTokensData.find(t => t.address === selectedTokens[0]);
+        const tokenName = token ? (token.symbol || token.name) : 'Token';
+        logToTerminal(`✅ Selected token: ${tokenName}`, 'success');
+    }
+    
+    hideTokenSelector();
+}
+
+async function selectDefaultTokens(type) {
+    try {
+        const response = await fetch('/api/tokens/defaults');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                const defaultAddresses = type === 'V2' ? data.v2Tokens : data.v3Tokens;
+                
+                if (isMultiSelect) {
+                    // Add to current selection (avoid duplicates)
+                    defaultAddresses.forEach(address => {
+                        if (!selectedTokens.includes(address)) {
+                            selectedTokens.push(address);
+                        }
+                    });
+                } else {
+                    selectedTokens = defaultAddresses.slice(0, 1); // Only first token for single select
+                }
+                
+                displayTokenSelector();
+                updateSelectedTokensDisplay();
+                logToTerminal(`✅ Added ${type} default tokens`, 'success');
+            }
+        }
+    } catch (error) {
+        logToTerminal(`❌ Failed to load default tokens: ${error.message}`, 'error');
+    }
+}
+
+function clearTokenSearch() {
+    document.getElementById('tokenSearch').value = '';
+    filteredTokens = [...allTokensData];
+    displayTokenSelector();
+}
+
+// Search functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Add search event listener when DOM is ready
+    setTimeout(() => {
+        const searchInput = document.getElementById('tokenSearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', function(e) {
+                const query = e.target.value.toLowerCase().trim();
+                
+                if (!query) {
+                    filteredTokens = [...allTokensData];
+                } else {
+                    filteredTokens = allTokensData.filter(token => {
+                        return (
+                            token.address.toLowerCase().includes(query) ||
+                            (token.symbol && token.symbol.toLowerCase().includes(query)) ||
+                            (token.name && token.name.toLowerCase().includes(query))
+                        );
+                    });
+                }
+                
+                displayTokenSelector();
+            });
+        }
+    }, 1000);
+});
+
+// Initialize the application
+function initializeApp() {
+    logToTerminal('🚀 TurboBot Web Controller v3.0 initialized', 'success');
+    logToTerminal('🔄 Establishing real-time connection...', 'info');
+    
+    // Initialize WebSocket connection
+    initializeWebSocket();
+    
+    // Load initial data
+    loadDashboardData();
+    
+    // Start periodic updates
+    setInterval(updateDashboard, 30000); // Update every 30 seconds
+    setInterval(updateGasData, 60000); // Update gas data every minute
+    
+    logToTerminal('💡 Enhanced with real-time API integration', 'info');
+    logToTerminal('🚨 Emergency controls and token management available', 'info');
+    logToTerminal('⛽ Live gas tracking and cost calculator active', 'info');
+}
 
 // WebSocket connection management
 function initializeWebSocket() {
@@ -866,7 +935,6 @@ function handleWebSocketMessage(message) {
         case 'complete':
             if (message.processId) {
                 activeCommands.delete(message.processId);
-                setButtonLoadingState(null, false);
             }
             
             if (message.success) {
@@ -877,12 +945,12 @@ function handleWebSocketMessage(message) {
                 stats.failedOps++;
             }
             updateStats();
+            // Refresh dashboard data after operations
+            setTimeout(loadDashboardData, 2000);
             break;
             
         case 'process_error':
             activeCommands.clear();
-            setButtonLoadingState(null, false);
-            
             logToTerminal(`💥 Process error: ${message.error}`, 'error');
             stats.failedOps++;
             updateStats();
@@ -891,71 +959,352 @@ function handleWebSocketMessage(message) {
         case 'stopped':
             logToTerminal(`🛑 Process stopped: ${message.command}`, 'warning');
             activeCommands.delete(message.processId);
-            setButtonLoadingState(null, false);
             break;
             
         case 'all_stopped':
             logToTerminal(`🛑 All processes stopped (${message.stoppedProcesses?.length || 0} processes)`, 'warning');
             automationProcesses.clear();
             activeCommands.clear();
-            setButtonLoadingState(null, false);
             updateStats();
             break;
             
         case 'long_running':
             logToTerminal(`⏳ ${message.message}`, 'info');
             break;
-            
-        default:
-            console.log('Unknown WebSocket message type:', message.type);
     }
 }
 
-// Enhanced button loading state management
-function setButtonLoadingState(buttonElement, isLoading) {
-    if (buttonElement) {
-        if (isLoading) {
-            buttonElement.classList.add('loading');
-            buttonElement.disabled = true;
-        } else {
-            buttonElement.classList.remove('loading');
-            buttonElement.disabled = false;
+// API Functions
+async function loadDashboardData() {
+    try {
+        const response = await fetch('/api/dashboard');
+        if (response.ok) {
+            dashboardData = await response.json();
+            if (dashboardData?.success) {
+                console.log(dashboardData?.dashboard)
+                updateDashboardUI(dashboardData?.dashboard);
+                updateGasUI(dashboardData?.gasData);
+                logToTerminal('📊 Dashboard data loaded', 'success');
+            }
         }
-    } else {
-        document.querySelectorAll('.btn').forEach(btn => {
-            btn.classList.remove('loading');
-            btn.disabled = false;
-        });
+    } catch (error) {
+        logToTerminal(`❌ Failed to load dashboard data: ${error?.message}`, 'error');
     }
 }
 
-// Enhanced command execution with proper loading management
-async function executeCommand(command, args = [], buttonElement = null) {
-    const fullCommand = `${command} ${args.join(' ')}`.trim();
-    
-    const validationResult = validateCommandClient(command, args);
-    if (!validationResult.valid) {
-        logToTerminal(`❌ Validation failed: ${validationResult.errors.join(', ')}`, 'error');
+async function refreshMainWallet() {
+    try {
+        const response = await fetch('/api/wallet/main');
+        if (response.ok) {
+            const data = await response.json();
+            updateMainWalletCard(data);
+        }
+    } catch (error) {
+        logToTerminal(`❌ Failed to refresh main wallet: ${error.message}`, 'error');
+    }
+}
+
+async function refreshWalletStats() {
+    try {
+        const response = await fetch('/api/wallets/stats');
+        if (response.ok) {
+            const data = await response.json();
+            updateWalletStatsCard(data);
+        }
+    } catch (error) {
+        logToTerminal(`❌ Failed to refresh wallet stats: ${error.message}`, 'error');
+    }
+}
+
+async function refreshGasData() {
+    try {
+        const response = await fetch('/api/gas-prices');
+        if (response.ok) {
+            gasData = await response.json();
+            updateGasUI(gasData);
+        }
+    } catch (error) {
+        logToTerminal(`❌ Failed to refresh gas data: ${error.message}`, 'error');
+    }
+}
+
+async function addTokens() {
+    const addresses = document.getElementById('tokenAddresses').value;
+    if (!addresses.trim()) {
+        logToTerminal('❌ Please enter token addresses', 'error');
         return;
     }
+
+    const addressList = addresses.split(',').map(addr => addr.trim()).filter(addr => addr);
+    
+    try {
+        showLoading(true);
+        logToTerminal(`🪙 Adding ${addressList.length} tokens...`, 'info');
+        
+        const response = await fetch('/api/tokens/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ addresses: addressList })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            logToTerminal(`✅ Added ${result.added} tokens, ${result.failed} failed`, 'success');
+            document.getElementById('tokenAddresses').value = '';
+            await loadTokenData();
+        } else {
+            logToTerminal(`❌ Failed to add tokens: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        logToTerminal(`❌ Error adding tokens: ${error.message}`, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function loadTokenData() {
+    try {
+        const response = await fetch('/api/tokens');
+        if (response.ok) {
+            tokenData = await response.json();
+            updateTokenStatsCard(tokenData);
+        }
+    } catch (error) {
+        console.error('Failed to load token data:', error);
+    }
+}
+
+// UI Update Functions
+function updateDashboardUI(dashboard) {
+    if (!dashboard?.success) return;
+    
+    
+    // Update status bar
+    document.getElementById('totalWallets').textContent = dashboard.wallets.total || '0';
+    document.getElementById('totalTokens').textContent = dashboard.tokens.total || '0';
+    document.getElementById('activeOps').textContent = dashboard.system.activeProcesses || '0';
+    
+    if (dashboard.gas) {
+        document.getElementById('gasPrice').textContent = `${dashboard.gas.currentGwei?.toFixed(1) || '--'} Gwei`;
+        document.getElementById('ethPrice').textContent = `${dashboard.gas.ethPrice?.toFixed(0) || '--'}`;
+    }
+    
+    // Update individual cards
+    updateMainWalletCard({ success: true, ...dashboard.mainWallet });
+    updateWalletStatsCard({ success: true, totalWallets: dashboard.wallets.total });
+    updateTokenStatsCard();
+    updateGasStatsCard(dashboard.gas);
+}
+
+function updateMainWalletCard(data) {
+    const content = document.getElementById('mainWalletContent');
+    
+    if (!data.success || data.error) {
+        content.innerHTML = `
+            <div class="text-red-300 text-sm">${data.error || 'Failed to load'}</div>
+        `;
+        return;
+    }
+    
+    content.innerHTML = `
+        <div class="space-y-2">
+            <div class="text-blue-200 text-xs">Address</div>
+            <div class="text-white text-sm font-mono break-all">${data.address || 'Not configured'}</div>
+            <div class="flex justify-between items-center">
+                <div class="text-blue-200 text-xs">Balance</div>
+                <div class="text-white font-semibold">${data.balance || '0'} ETH</div>
+            </div>
+            ${data.canFund !== undefined ? `
+                <div class="flex items-center space-x-2">
+                    <div class="w-2 h-2 rounded-full ${data.canFund ? 'bg-green-400' : 'bg-red-400'}"></div>
+                    <div class="text-xs ${data.canFund ? 'text-green-300' : 'text-red-300'}">
+                        ${data.canFund ? 'Can fund operations' : 'Insufficient balance'}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function updateWalletStatsCard(data) {
+    const content = document.getElementById('walletStatsContent');
+    
+    if (!data.success) {
+        content.innerHTML = `<div class="text-red-300 text-sm">Failed to load wallet stats</div>`;
+        return;
+    }
+    
+    content.innerHTML = `
+        <div class="space-y-2">
+            <div class="flex justify-between items-center">
+                <div class="text-green-200 text-xs">Total Wallets</div>
+                <div class="text-white font-semibold">${data.totalWallets || 0}</div>
+            </div>
+            ${data.summary ? `
+                <div class="flex justify-between items-center">
+                    <div class="text-green-200 text-xs">Funded</div>
+                    <div class="text-white font-semibold">${data.summary.fundedWallets || 0}</div>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div class="text-green-200 text-xs">Avg Balance</div>
+                    <div class="text-white font-semibold">${parseFloat(data.summary.avgBalance || 0).toFixed(6)} ETH</div>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div class="text-green-200 text-xs">Estimated Total</div>
+                    <div class="text-white font-semibold">${data.summary.estimatedTotalValue?.toFixed(6) || '0'} ETH</div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function updateTokenStatsCard(tokenData) {
+    const content = document.getElementById('tokenStatsContent');
+    
+    if (!tokenData.success) {
+        content.innerHTML = `<div class="text-yellow-300 text-sm">Loading tokens...</div>`;
+        return;
+    }
+    
+    content.innerHTML = `
+        <div class="space-y-2">
+            <div class="flex justify-between items-center">
+                <div class="text-yellow-200 text-xs">Total Tokens</div>
+                <div class="text-white font-semibold">${tokenData.totalTokens || 0}</div>
+            </div>
+            <div class="flex justify-between items-center">
+                <div class="text-yellow-200 text-xs">Unique Symbols</div>
+                <div class="text-white font-semibold">${tokenData.uniqueSymbols || 0}</div>
+            </div>
+            ${tokenData.recentlyAdded && tokenData.recentlyAdded.length > 0 ? `
+                <div class="text-yellow-200 text-xs">Recently Added</div>
+                <div class="space-y-1">
+                    ${tokenData.recentlyAdded.slice(0, 3).map(token => `
+                        <div class="text-white text-xs font-mono">${token.symbol}</div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function updateGasStatsCard(gasInfo) {
+    const content = document.getElementById('gasStatsContent');
+    
+    if (!gasInfo) {
+        content.innerHTML = `<div class="text-red-300 text-sm">Loading gas data...</div>`;
+        return;
+    }
+    
+    content.innerHTML = `
+        <div class="space-y-2">
+            <div class="flex justify-between items-center">
+                <div class="text-red-200 text-xs">Current</div>
+                <div class="text-white font-semibold">${gasInfo.currentGwei?.toFixed(1) || '--'} Gwei</div>
+            </div>
+            <div class="flex justify-between items-center">
+                <div class="text-red-200 text-xs">Network</div>
+                <div class="text-white font-semibold">${gasInfo.networkCongestion || '--'}</div>
+            </div>
+            <div class="flex justify-between items-center">
+                <div class="text-red-200 text-xs">ETH Price</div>
+                <div class="text-white font-semibold">${gasInfo.ethPrice?.toFixed(0) || '--'}</div>
+            </div>
+        </div>
+    `;
+}
+
+function updateGasUI(gasData) {
+    if (!gasData) return;
+
+    console.log(gasData)
+    
+    // Update gas calculator
+    document.getElementById('currentGasGwei').textContent = `${gasData.currentGasPriceGwei?.toFixed(2) || '--'} Gwei`;
+    document.getElementById('cost1000Tx').textContent = `${gasData.costPer1000MicroTxUSD || '--'}`;
+    document.getElementById('cost1000Swaps').textContent = `${gasData.costPer1000SwapTxUSD || '--'}`;
+    document.getElementById('networkStatus').textContent = gasData.networkCongestion || '--';
+    
+    // Update status bar
+    document.getElementById('gasPrice').textContent = `${gasData.currentGasPriceGwei?.toFixed(1) || '--'} Gwei`;
+    document.getElementById('ethPrice').textContent = `${gasData.ethPriceUSD?.toFixed(0) || '--'}`;
+}
+
+// Token Manager Modal
+function showTokenManager() {
+    loadTokenDatabase();
+    document.getElementById('tokenModal').classList.remove('hidden');
+}
+
+function hideTokenManager() {
+    document.getElementById('tokenModal').classList.add('hidden');
+}
+
+async function loadTokenDatabase() {
+    try {
+        const response = await fetch('/api/tokens');
+        if (response.ok) {
+            const data = await response.json();
+            displayTokenDatabase(data);
+        }
+    } catch (error) {
+        document.getElementById('tokenModalContent').innerHTML = `
+            <div class="text-red-300">Failed to load token database</div>
+        `;
+    }
+}
+
+function displayTokenDatabase(data) {
+    const content = document.getElementById('tokenModalContent');
+    
+    if (!data.success || !data.tokens.length) {
+        content.innerHTML = `
+            <div class="text-center py-8">
+                <div class="text-gray-400 text-lg mb-4">No tokens in database</div>
+                <div class="text-gray-500">Add some tokens using the token management section</div>
+            </div>
+        `;
+        return;
+    }
+    
+    content.innerHTML = `
+        <div class="space-y-4">
+            <div class="text-white font-medium">Found ${data.totalTokens} tokens (${data.uniqueSymbols} unique symbols)</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-80 overflow-y-auto">
+                ${data.tokens.map(token => `
+                    <div class="bg-white/10 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="text-white font-medium">${token.symbol}</div>
+                            <div class="text-gray-400 text-xs">${token.decimals} decimals</div>
+                        </div>
+                        <div class="text-gray-300 text-sm mb-2">${token.name || 'Unknown Name'}</div>
+                        <div class="text-gray-400 text-xs font-mono break-all">${token.address}</div>
+                        <div class="text-gray-500 text-xs mt-2">Added ${new Date(token.addedAt).toLocaleDateString()}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// Command execution functions
+async function executeCommand(command, args = [], buttonElement = null) {
+    const fullCommand = `${command} ${args.join(' ')}`.trim();
     
     logToTerminal(`🚀 Executing: ${fullCommand}`, 'info');
     addToHistory(fullCommand);
     
     if (buttonElement) {
-        setButtonLoadingState(buttonElement, true);
+        buttonElement.disabled = true;
+        buttonElement.classList.add('opacity-50');
     }
     
     try {
         const response = await fetch('/api/execute', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                command: command,
-                args: args
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: command, args: args })
         });
         
         const result = await response.json();
@@ -973,10 +1322,6 @@ async function executeCommand(command, args = [], buttonElement = null) {
             }
             stats.failedOps++;
             updateStats();
-            
-            if (buttonElement) {
-                setButtonLoadingState(buttonElement, false);
-            }
         }
         
         if (['volumeV2', 'volumeV3', 'volumeV3Fresh', 'create-and-swap', 'create-and-swapv3', 'create-and-multiswapv3'].includes(command)) {
@@ -988,274 +1333,13 @@ async function executeCommand(command, args = [], buttonElement = null) {
         logToTerminal(`🌐 Network error: ${error.message}`, 'error');
         stats.failedOps++;
         updateStats();
-        
+    } finally {
         if (buttonElement) {
-            setButtonLoadingState(buttonElement, false);
+            setTimeout(() => {
+                buttonElement.disabled = false;
+                buttonElement.classList.remove('opacity-50');
+            }, 2000);
         }
-    }
-}
-
-// Client-side command validation
-function validateCommandClient(command, args) {
-    const errors = [];
-    
-    switch (command) {
-        case 'volumeV2':
-        case 'volumeV3':
-            if (args[2] && !isValidEthereumAddress(args[2])) {
-                errors.push('Token address must be a valid Ethereum address');
-            }
-            if (args[3] && (isNaN(args[3]) || parseInt(args[3]) < 50)) {
-                errors.push('TX delay must be at least 50 milliseconds');
-            }
-            break;
-            
-        case 'create':
-            if (args[0] && (isNaN(args[0]) || parseInt(args[0]) < 1 || parseInt(args[0]) > 50000)) {
-                errors.push('Wallet count must be between 1 and 50,000');
-            }
-            break;
-    }
-    
-    return {
-        valid: errors.length === 0,
-        errors: errors
-    };
-}
-
-// Validate Ethereum address format
-function isValidEthereumAddress(address) {
-    return /^0x[a-fA-F0-9]{40}$/.test(address);
-}
-
-// KILL ALL PROCESSES - Emergency function
-async function killAllProcesses() {
-    const button = event.target;
-    
-    logToTerminal('🚨 EMERGENCY: Killing all processes...', 'error');
-    button.disabled = true;
-    button.innerHTML = '💀 KILLING...';
-    
-    try {
-        // First try graceful stop
-        const response = await fetch('/api/stop-all', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            logToTerminal(`✅ ${result.message}`, 'success');
-        } else {
-            logToTerminal(`❌ Graceful stop failed: ${result.error}`, 'error');
-        }
-        
-        // Force kill attempt
-        const killResponse = await fetch('/api/force-kill', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        
-        if (killResponse.ok) {
-            logToTerminal('💀 Force kill signal sent', 'warning');
-        }
-        
-        // Clear all tracking
-        automationProcesses.clear();
-        activeCommands.clear();
-        document.getElementById('activeOps').textContent = '0';
-        
-        logToTerminal('🛑 All processes terminated', 'success');
-        
-    } catch (error) {
-        logToTerminal(`🌐 Error during kill operation: ${error.message}`, 'error');
-    } finally {
-        button.disabled = false;
-        button.innerHTML = '💀 KILL ALL PROCESSES';
-    }
-}
-
-// Gas cost calculator functions
-function updateGasCalculator() {
-    const gasPrice = gasData.currentPrice; // in Gwei
-    const ethPrice = gasData.ethPrice; // in USD
-
-
-    
-    if (gasPrice > 0 && ethPrice > 0) {
-        // Gas for micro transaction (21,000 gas)
-        const gasCostEth = (gasPrice * 21000) / 1e9; // Convert Gwei to ETH
-        const gasCostUsd = gasCostEth * ethPrice;
-
-        console.log(gasData)
-        
-        // Cost for 1000 transactions
-        const cost1000Usd = gasCostUsd * 1000;
-        
-        // Recommended gas (10% higher than current)
-        const recommendedGas = (gasPrice * 1.1).toFixed(2);
-        
-        document.getElementById('currentGasGwei').textContent = `${gasPrice.toFixed(2)} Gwei`;
-        document.getElementById('costPerTx').textContent = `${gasData.costPerMicroTx}$`;
-        document.getElementById('cost1000Tx').textContent = `${gasData.costPer1000Tx}$`;
-        document.getElementById('cost1000Swaps').textContent = `${gasData.costPer1000SwapTx}$`;
-        document.getElementById('recommendedGas').textContent = `${recommendedGas} Gwei`;
-        document.getElementById('networkStatus').textContent = `${gasData.networkStatus}`;
-        document.getElementById('gasPrice').textContent = `${gasData.currentPrice.toFixed(2)} Gwei`;
-    }
-}
-
-// Fetch real gas prices from backend API
-async function fetchGasPrices() {
-    try {
-        const response = await fetch('/api/gas-prices');
-        if (response.ok) {
-            const gasInfo = await response.json();
-            
-            gasData.ethPrice = gasInfo.ethPriceUSD;
-            gasData.currentPrice = gasInfo.currentGasPriceGwei;
-            
-            // Update additional gas data from backend
-            gasData.recommendedPrice = gasInfo.recommendedGasPriceGwei;
-            gasData.costPerMicroTx = gasInfo.costPerMicroTxUSD;
-            gasData.costPer1000Tx = gasInfo.costPer1000MicroTxUSD;
-            gasData.costPer1000SwapTx = gasInfo.costPer1000SwapTxUSD;
-            gasData.networkStatus = gasInfo.networkCongestion;
-            
-            updateGasCalculator();
-            
-            console.log('Gas prices updated from backend:', {
-                gasPrice: `${gasInfo.currentGasPriceGwei} Gwei`,
-                ethPrice: `${gasInfo.ethPriceUSD}`,
-                cost1000MicroTx: `${gasInfo.costPer1000MicroTxUSD}`,
-                cost1000SwapTx: `${gasInfo.costPer1000SwapTxUSD}`,
-                congestion: gasInfo.networkCongestion
-            });
-        } else {
-            throw new Error('Backend gas API not available');
-        }
-        
-    } catch (error) {
-        console.log('Could not fetch gas prices from backend:', error);
-        // Fallback to external API
-        try {
-            const ethResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
-            const ethData = await ethResponse.json();
-            gasData.ethPrice = ethData.ethereum.usd;
-            
-            // Simulate gas price
-            gasData.currentPrice = Math.random() * 30 + 10;
-            
-            updateGasCalculator();
-        } catch (fallbackError) {
-            // Use hardcoded fallback values
-            gasData.ethPrice = 3500;
-            gasData.currentPrice = 20;
-            updateGasCalculator();
-        }
-    }
-}
-
-// Enhanced volume generation functions
-async function startVolumeV2() {
-    const start = document.getElementById('startIndex').value || '0';
-    const end = document.getElementById('endIndex').value || '100';
-    const token = document.getElementById('volumeToken').value;
-    const txDelay = document.getElementById('volumeTxDelay').value || '150';
-    const cycleDelay = document.getElementById('volumeCycleDelay').value || '3000';
-    
-    if (token && !isValidEthereumAddress(token)) {
-        logToTerminal('❌ Invalid token address format', 'error');
-        return;
-    }
-    
-    const args = [start, end];
-    if (token) args.push(token);
-    args.push(txDelay, cycleDelay, '1000');
-    
-    logToTerminal('🔥 Starting V2 volume generation...', 'warning');
-    await executeCommand('volumeV2', args, event.target);
-}
-
-async function startVolumeV3() {
-    const start = document.getElementById('startIndex').value || '0';
-    const end = document.getElementById('endIndex').value || '100';
-    const token = document.getElementById('volumeToken').value;
-    const txDelay = document.getElementById('volumeTxDelay').value || '150';
-    const cycleDelay = document.getElementById('volumeCycleDelay').value || '3000';
-    
-    if (token && !isValidEthereumAddress(token)) {
-        logToTerminal('❌ Invalid token address format', 'error');
-        return;
-    }
-    
-    const args = [start, end];
-    if (token) args.push(token);
-    args.push(txDelay, cycleDelay, '1000');
-    
-    logToTerminal('⚡ Starting V3 volume generation...', 'warning');
-    await executeCommand('volumeV3', args, event.target);
-}
-
-async function startVolumeV3Fresh() {
-    const token = document.getElementById('volumeToken').value;
-    const txDelay = document.getElementById('volumeTxDelay').value || '2000';
-    const cycleDelay = document.getElementById('volumeCycleDelay').value || '5000';
-    const funding = document.getElementById('fundingAmount').value || '0.00001';
-    
-    if (token && !isValidEthereumAddress(token)) {
-        logToTerminal('❌ Invalid token address format', 'error');
-        return;
-    }
-    
-    const args = [];
-    if (token) args.push(token);
-    args.push(txDelay, cycleDelay, funding);
-    
-    logToTerminal('🆕 Starting V3 fresh wallet volume generation...', 'warning');
-    await executeCommand('volumeV3Fresh', args, event.target);
-}
-
-// Stop automation
-async function stopAutomation() {
-    const buttonElement = event.target;
-    
-    if (automationProcesses.size === 0) {
-        logToTerminal('ℹ️ No automation processes running', 'info');
-        return;
-    }
-    
-    logToTerminal(`🛑 Stopping ${automationProcesses.size} automation process(es)...`, 'warning');
-    setButtonLoadingState(buttonElement, true);
-    
-    try {
-        const response = await fetch('/api/stop-all', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            logToTerminal(`✅ ${result.message}`, 'success');
-            automationProcesses.clear();
-            activeCommands.clear();
-            document.getElementById('activeOps').textContent = '0';
-        } else {
-            logToTerminal(`❌ Failed to stop processes: ${result.error}`, 'error');
-        }
-        
-    } catch (error) {
-        logToTerminal(`🌐 Error stopping processes: ${error.message}`, 'error');
-    } finally {
-        setButtonLoadingState(buttonElement, false);
     }
 }
 
@@ -1278,18 +1362,6 @@ async function checkWallets() {
     await executeCommand('check', [], event.target);
 }
 
-async function startAirdrop() {
-    const chunk = document.getElementById('airdropChunk').value || '500';
-    const total = document.getElementById('airdropTotal').value;
-    const delay = document.getElementById('airdropDelay').value || '3000';
-    
-    const args = [chunk];
-    if (total) args.push(total);
-    args.push(delay);
-    
-    await executeCommand('airdrop-batch', args, event.target);
-}
-
 // Trading functions
 async function startSwapBatch() {
     const batchSize = document.getElementById('tradeBatchSize').value || '50';
@@ -1303,18 +1375,6 @@ async function startSwapBatch() {
     await executeCommand('swap-batch', args, event.target);
 }
 
-async function startMultiSwapBatch() {
-    const batchSize = document.getElementById('tradeBatchSize').value || '50';
-    const tokens = document.getElementById('multiTokens').value;
-    const delay = '2000';
-    
-    const args = [batchSize];
-    if (tokens) args.push(tokens);
-    args.push(delay);
-    
-    await executeCommand('multiswap-batch', args, event.target);
-}
-
 async function startV3SwapBatch() {
     const batchSize = document.getElementById('tradeBatchSize').value || '50';
     const token = document.getElementById('singleToken').value;
@@ -1325,157 +1385,106 @@ async function startV3SwapBatch() {
     await executeCommand('swapv3-batch', [batchSize, token, start, end, delay], event.target);
 }
 
-async function individualSwap() {
+// Volume generation functions
+async function startVolumeV2() {
     const start = document.getElementById('startIndex').value || '0';
     const end = document.getElementById('endIndex').value || '100';
-    const token = document.getElementById('singleToken').value;
+    const token = document.getElementById('volumeToken').value;
+    const txDelay = document.getElementById('volumeTxDelay').value || '150';
+    const cycleDelay = document.getElementById('volumeCycleDelay').value || '3000';
     
     const args = [start, end];
     if (token) args.push(token);
+    args.push(txDelay, cycleDelay, '1000');
     
-    await executeCommand('swap', args, event.target);
+    logToTerminal('🔥 Starting V2 volume generation...', 'warning');
+    await executeCommand('volumeV2', args, event.target);
 }
 
-// Automation functions
-async function startCreateAndSwap() {
-    const tokens = document.getElementById('multiTokens').value;
-    const cycleDelay = document.getElementById('cycleDelay').value || '2000';
-    const fundingAmount = document.getElementById('fundingAmount').value || '0.00001';
+async function startVolumeV3() {
+    const start = document.getElementById('startIndex').value || '0';
+    const end = document.getElementById('endIndex').value || '100';
+    const token = document.getElementById('volumeToken').value;
+    const txDelay = document.getElementById('volumeTxDelay').value || '150';
+    const cycleDelay = document.getElementById('volumeCycleDelay').value || '3000';
+    
+    const args = [start, end];
+    if (token) args.push(token);
+    args.push(txDelay, cycleDelay, '1000');
+    
+    logToTerminal('⚡ Starting V3 volume generation...', 'warning');
+    await executeCommand('volumeV3', args, event.target);
+}
+
+async function startVolumeV3Fresh() {
+    const token = document.getElementById('volumeToken').value;
+    const txDelay = document.getElementById('volumeTxDelay').value || '2000';
+    const cycleDelay = document.getElementById('volumeCycleDelay').value || '5000';
+    const funding = document.getElementById('fundingAmount').value || '0.00001';
     
     const args = [];
-    if (tokens) args.push(tokens);
-    args.push(cycleDelay, fundingAmount);
+    if (token) args.push(token);
+    args.push(txDelay, cycleDelay, funding);
     
-    logToTerminal('Starting continuous create & swap automation...', 'warning');
-    automationProcesses.add('create-and-swap');
-    await executeCommand('create-and-swap', args, event.target);
+    logToTerminal('🆕 Starting V3 fresh wallet volume generation...', 'warning');
+    await executeCommand('volumeV3Fresh', args, event.target);
 }
 
-async function startCreateAndSwapV3() {
-    const tokens = document.getElementById('multiTokens').value;
-    const cycleDelay = document.getElementById('cycleDelay').value || '3000';
-    const fundingAmount = document.getElementById('fundingAmount').value || '0.000005';
+// Emergency functions
+async function killAllProcesses() {
+    const button = event.target;
     
-    const args = [];
-    if (tokens) args.push(tokens);
-    args.push(cycleDelay, fundingAmount);
+    logToTerminal('🚨 EMERGENCY: Killing all processes...', 'error');
+    button.disabled = true;
+    button.innerHTML = '💀 KILLING...';
     
-    logToTerminal('Starting continuous V3 create & swap automation...', 'warning');
-    automationProcesses.add('create-and-swapv3');
-    await executeCommand('create-and-swapv3', args, event.target);
-}
-
-async function startCreateAndMultiSwapV3() {
-    const tokens = document.getElementById('multiTokens').value;
-    const cycleDelay = document.getElementById('cycleDelay').value || '3000';
-    const fundingAmount = document.getElementById('fundingAmount').value || '0.000005';
-    
-    const args = [];
-    if (tokens) args.push(tokens);
-    args.push(cycleDelay, fundingAmount);
-    
-    logToTerminal('Starting continuous V3 multi-swap automation...', 'warning');
-    automationProcesses.add('create-and-multiswapv3');
-    await executeCommand('create-and-multiswapv3', args, event.target);
-}
-
-// Configuration functions
-function updateConfig() {
-    const config = {
-        rpcUrl: document.getElementById('rpcUrl').value,
-        gasMax: document.getElementById('gasMax').value
-    };
-    
-    localStorage.setItem('turbobotConfig', JSON.stringify(config));
-    logToTerminal('💾 Configuration updated and saved', 'success');
-    logToTerminal(`🌐 RPC URL: ${config.rpcUrl || 'Not set'}`, 'info');
-    logToTerminal(`⛽ Gas Max: ${config.gasMax || 'Default'} ETH`, 'info');
-}
-
-function loadConfiguration() {
-    const savedConfig = localStorage.getItem('turbobotConfig');
-    if (savedConfig) {
-        try {
-            const config = JSON.parse(savedConfig);
-            if (config.rpcUrl) document.getElementById('rpcUrl').value = config.rpcUrl;
-            if (config.gasMax) document.getElementById('gasMax').value = config.gasMax;
-            logToTerminal('📁 Configuration loaded from browser storage', 'info');
-        } catch (e) {
-            logToTerminal('⚠️ Failed to load saved configuration', 'warning');
-        }
-    } else {
-        document.getElementById('gasMax').value = "0.0001";
-    }
-}
-
-// Parse server output for statistics updates
-function parseOutputForStats(output) {
     try {
-        let walletMatch = output.match(/(?:Created|Total|Found|Generated)\s+(\d+)\s+wallets?/i);
-        if (walletMatch) {
-            const walletCount = parseInt(walletMatch[1]);
-            if (walletCount > stats.totalWallets) {
-                stats.totalWallets = walletCount;
-                updateStats();
-            }
-        }
+        const response = await fetch('/api/force-kill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
         
-        walletMatch = output.match(/(\d+)\s+wallets?\s+loaded/i);
-        if (walletMatch) {
-            const walletCount = parseInt(walletMatch[1]);
-            stats.totalWallets = walletCount;
-            updateStats();
-        }
-        
-        let fundedMatch = output.match(/(\d+)\s+(?:funded|active)\s+wallets?/i);
-        if (fundedMatch) {
-            const fundedCount = parseInt(fundedMatch[1]);
-            stats.fundedWallets = fundedCount;
-            document.getElementById('fundedWallets').textContent = fundedCount;
-        }
-        
-        let balanceMatch = output.match(/Total\s+balance:\s*([\d.]+)\s*ETH/i);
-        if (balanceMatch) {
-            const totalBalance = parseFloat(balanceMatch[1]);
-            stats.totalBalance = totalBalance;
-            document.getElementById('totalBalance').textContent = totalBalance.toFixed(6);
-        }
-        
-        let gasMatch = output.match(/Gas\s+used:\s*([\d.]+)\s*ETH/i);
-        if (gasMatch) {
-            const gasUsed = parseFloat(gasMatch[1]);
-            stats.totalGasUsed += gasUsed;
-            updateStats();
-        }
-        
-        if (output.match(/✅|✓|SUCCESS|successful/i) && output.match(/transaction|tx|swap/i)) {
-            stats.successfulOps++;
-            updateStats();
-        }
-        
-        if (output.match(/❌|✗|FAILED|ERROR|failed/i) && output.match(/transaction|tx|swap/i)) {
-            stats.failedOps++;
-            updateStats();
+        if (response.ok) {
+            logToTerminal('💀 Force kill signal sent', 'warning');
+            automationProcesses.clear();
+            activeCommands.clear();
+            document.getElementById('activeOps').textContent = '0';
+            logToTerminal('🛑 All processes terminated', 'success');
         }
         
     } catch (error) {
-        console.log('Error parsing output for stats:', error);
+        logToTerminal(`🌐 Error during kill operation: ${error.message}`, 'error');
+    } finally {
+        setTimeout(() => {
+            button.disabled = false;
+            button.innerHTML = '💀 KILL ALL PROCESSES';
+        }, 3000);
     }
 }
 
-// Update statistics
-function updateStats() {
-    document.getElementById('totalWallets').textContent = stats.totalWallets;
-    document.getElementById('successfulOps').textContent = stats.successfulOps;
-    document.getElementById('failedOps').textContent = stats.failedOps;
-    document.getElementById('totalGasUsed').textContent = stats.totalGasUsed.toFixed(6);
+// Utility functions
+function updateConnectionStatus(connected = false) {
+    const statusDot = document.getElementById('connectionStatus');
+    const statusText = document.getElementById('connectionText');
     
-    const total = stats.successfulOps + stats.failedOps;
-    const rate = total > 0 ? ((stats.successfulOps / total) * 100).toFixed(1) : 0;
-    document.getElementById('successRate').textContent = `${rate}%`;
+    if (connected) {
+        statusDot.className = 'w-3 h-3 rounded-full bg-green-500 animate-pulse-slow';
+        statusText.textContent = 'Connected';
+    } else {
+        statusDot.className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse-slow';
+        statusText.textContent = 'Disconnected';
+    }
 }
 
-// Terminal logging functions
+function showLoading(show = true) {
+    const loading = document.getElementById('loading');
+    if (show) {
+        loading.classList.remove('hidden');
+    } else {
+        loading.classList.add('hidden');
+    }
+}
+
 function logToTerminal(message, type = 'info') {
     const terminal = document.getElementById('terminal');
     const logEntry = document.createElement('div');
@@ -1483,48 +1492,24 @@ function logToTerminal(message, type = 'info') {
     
     const timestamp = new Date().toLocaleTimeString();
     logEntry.innerHTML = `[${timestamp}] ${message}`;
+    console.log(message)
     
     terminal.appendChild(logEntry);
     terminal.scrollTop = terminal.scrollHeight;
+    
+    // Keep only last 1000 entries
+    while (terminal.children.length > 1000) {
+        terminal.removeChild(terminal.firstChild);
+    }
 }
 
 function clearTerminal() {
     const terminal = document.getElementById('terminal');
     terminal.innerHTML = `
-        <div class="log-entry log-info">Terminal cleared - TurboBot Web Controller v2.0</div>
-        <div class="log-entry">Ready for new commands</div>
+        <div class="log-entry log-info">Terminal cleared - TurboBot Web Controller v3.0</div>
+        <div class="log-entry">Enhanced with real-time API integration</div>
         <div class="log-entry">─────────────────────────────────────────────</div>
     `;
-}
-
-// Update connection status
-function updateConnectionStatus(connected = false) {
-    const statusDot = document.getElementById('connectionStatus');
-    const statusText = document.getElementById('connectionText');
-    
-    if (connected) {
-        statusDot.classList.add('connected');
-        statusText.textContent = 'Connected';
-    } else {
-        statusDot.classList.remove('connected');
-        statusText.textContent = 'Disconnected';
-    }
-}
-
-// Add command to history
-function addToHistory(command) {
-    commandHistory.unshift(command);
-    if (commandHistory.length > 50) {
-        commandHistory.pop();
-    }
-}
-
-// Monitoring functions
-function refreshStats() {
-    logToTerminal('🔄 Refreshing statistics...', 'info');
-    executeCommand('check', [], null);
-    checkSystemStatus();
-    logToTerminal('✅ Statistics refresh initiated', 'success');
 }
 
 function exportLogs() {
@@ -1542,104 +1527,82 @@ function exportLogs() {
     logToTerminal('📥 Logs exported successfully', 'success');
 }
 
-// System status check
-async function checkSystemStatus() {
-    try {
-        const response = await fetch('/api/status');
-        const status = await response.json();
-        
-        if (!status.scriptExists) {
-            logToTerminal('⚠️ script.js not found. Please run setup first.', 'warning');
-        }
-        
-        if (!status.envExists) {
-            logToTerminal('⚠️ .env file not found. Please run setup first.', 'warning');
-        }
-        
-        document.getElementById('activeOps').textContent = status.activeProcesses || automationProcesses.size;
-        
-    } catch (error) {
-        console.error('Error checking system status:', error);
+function addToHistory(command) {
+    commandHistory.unshift(command);
+    if (commandHistory.length > 50) {
+        commandHistory.pop();
     }
 }
 
-// Simulate real-time updates
-function simulateRealtimeUpdates() {
-    // Update gas price display in status bar
-    const gasPrice = gasData.currentPrice > 0 ? gasData.currentPrice.toFixed(1) : (Math.random() * 30 + 10).toFixed(1);
-    // document.getElementById('gasPrice').textContent = `${gasPrice} Gwei`;
+function updateStats() {
+    document.getElementById('successfulOps').textContent = stats.successfulOps;
+    document.getElementById('failedOps').textContent = stats.failedOps;
+    document.getElementById('totalGasUsed').textContent = stats.totalGasUsed.toFixed(6);
     
-    // Update ETH price display
-    const ethPrice = gasData.ethPrice > 0 ? gasData.ethPrice.toFixed(0) : (Math.random() * 100 + 3500).toFixed(0);
-    document.getElementById('ethPrice').textContent = `${ethPrice}`;
-    
-    // Update active operations
-    document.getElementById('activeOps').textContent = automationProcesses.size;
+    const total = stats.successfulOps + stats.failedOps;
+    const rate = total > 0 ? ((stats.successfulOps / total) * 100).toFixed(1) : 0;
+    document.getElementById('successRate').textContent = `${rate}%`;
 }
 
-// Initialize the application
-function initializeApp() {
-    logToTerminal('🚀 TurboBot Web Controller v2.0 initialized', 'success');
-    logToTerminal('🔄 Establishing real-time connection...', 'info');
+function parseOutputForStats(output) {
+    try {
+        if (output.match(/✅|✓|SUCCESS|successful/i) && output.match(/transaction|tx|swap/i)) {
+            stats.successfulOps++;
+            updateStats();
+        }
+        
+        if (output.match(/❌|✗|FAILED|ERROR|failed/i) && output.match(/transaction|tx|swap/i)) {
+            stats.failedOps++;
+            updateStats();
+        }
+        
+        let gasMatch = output.match(/Gas\s+used:\s*([\d.]+)\s*ETH/i);
+        if (gasMatch) {
+            const gasUsed = parseFloat(gasMatch[1]);
+            stats.totalGasUsed += gasUsed;
+            updateStats();
+        }
+    } catch (error) {
+        console.log('Error parsing output for stats:', error);
+    }
+}
+
+// Refresh functions
+async function refreshAllStats() {
+    logToTerminal('🔄 Refreshing all statistics...', 'info');
+    showLoading(true);
     
-    // Initialize WebSocket connection
-    initializeWebSocket();
-    
-    // Load configuration
-    loadConfiguration();
-    
-    // Check system status
-    checkSystemStatus();
-    
-    // Fetch initial gas prices
-    fetchGasPrices();
-    
-    // Start real-time updates
-    setInterval(simulateRealtimeUpdates, 5000);
-    setInterval(fetchGasPrices, 30000); // Update gas prices every 30 seconds
-    
-    logToTerminal('💡 All controls consolidated into single interface', 'info');
-    logToTerminal('🚨 Emergency kill button available for process termination', 'info');
-    logToTerminal('⛽ Gas cost calculator shows micro-transaction costs', 'info');
+    try {
+        await Promise.all([
+            loadDashboardData(),
+            refreshGasData(),
+            loadTokenData()
+        ]);
+        logToTerminal('✅ All statistics refreshed', 'success');
+    } catch (error) {
+        logToTerminal(`❌ Error refreshing stats: ${error.message}`, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function updateDashboard() {
+    loadDashboardData();
+}
+
+function updateGasData() {
+    refreshGasData();
+}
+
+async function viewTokenDatabase() {
+    showTokenManager();
 }
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', initializeApp);
 
-// Auto-save configuration on input changes
-document.addEventListener('input', function(e) {
-    if (e.target.matches('#rpcUrl, #gasMax')) {
-        clearTimeout(window.configSaveTimeout);
-        window.configSaveTimeout = setTimeout(() => {
-            const config = {
-                rpcUrl: document.getElementById('rpcUrl').value,
-                gasMax: document.getElementById('gasMax').value
-            };
-            localStorage.setItem('turbobotConfig', JSON.stringify(config));
-        }, 1000);
-    }
-});
+// window.addEventListener('load', initializeApp);
 
-// Connection retry logic
-function attemptReconnect() {
-    if (!wsConnection || wsConnection.readyState === WebSocket.CLOSED) {
-        logToTerminal('🔄 Attempting to reconnect...', 'info');
-        initializeWebSocket();
-    }
-}
-
-// Periodic connection check
-setInterval(() => {
-    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
-        try {
-            wsConnection.send(JSON.stringify({ type: 'ping' }));
-        } catch (error) {
-            attemptReconnect();
-        }
-    } else {
-        attemptReconnect();
-    }
-}, 30000);
 
 // Handle page unload
 window.addEventListener('beforeunload', function(e) {
@@ -1654,6 +1617,19 @@ window.addEventListener('beforeunload', function(e) {
         return e.returnValue;
     }
 });
+
+// Auto-refresh connection check
+setInterval(() => {
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        try {
+            wsConnection.send(JSON.stringify({ type: 'ping' }));
+        } catch (error) {
+            initializeWebSocket();
+        }
+    } else {
+        initializeWebSocket();
+    }
+}, 30000);
     </script>
 </body>
 </html>

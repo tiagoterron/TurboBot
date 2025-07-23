@@ -10,6 +10,40 @@ const app = express();
 const server = require('http').createServer(app);
 const wss = new WebSocket.Server({ server });
 
+const { 
+    config,
+    provider,
+    addTokens,
+    addSingleToken,
+    loadTokens,
+    saveTokens,
+    getTokenByAddress,
+    getTokensBySymbol,
+    errorLog,
+    sleep,
+    log,
+    saveWallets,
+    randomIndex,
+    loadWallets,
+    createWallets,
+    savePrivateKey,
+    analyzeTransactionGas,
+    analyzeGasPrice,
+    getGasEstimates,
+    contracts,
+    routerAbi,
+    airdropAbi,
+    multicallAbi,
+    turboDeployerAbi,
+    volumeSwapAbi,
+    ERC20_ABI,
+    defaultTokens,
+    LockyFiDeployerAbi,
+    getContractAddress,
+    createWalletsToTarget,
+    checkWallets
+} = require("./helper")
+
 app.use(express.json());
 app.use(express.static('public')); // Serve the HTML file
 
@@ -231,7 +265,6 @@ app.get('/api/gas-prices', async (req, res) => {
     try {
         const gasData = await calculateGasPrices();
 
-        console.log(gasData)
         
         res.json({
             success: true,
@@ -382,6 +415,511 @@ function validateCommand(command, args) {
     
     return errors;
 }
+
+// Add these API endpoints to your existing Express server
+
+// ============================================================================
+// WALLET MANAGEMENT APIs
+// ============================================================================
+
+// Get comprehensive wallet statistics
+app.get('/api/wallets/stats', async (req, res) => {
+    try {
+        const wallets = loadWallets();
+        
+        if (wallets.length === 0) {
+            return res.json({
+                success: true,
+                totalWallets: 0,
+                wallets: [],
+                mainWallet: null,
+                summary: {
+                    totalETH: "0",
+                    avgBalance: "0",
+                    fundedWallets: 0,
+                    emptyWallets: 0
+                }
+            });
+        }
+
+        // Get main wallet info
+        let mainWalletInfo = null;
+        if (config.fundingPrivateKey) {
+            try {
+                const mainWallet = new ethers.Wallet(config.fundingPrivateKey, provider);
+                const mainBalance = await provider.getBalance(mainWallet.address);
+                
+                mainWalletInfo = {
+                    address: mainWallet.address,
+                    balance: ethers.utils.formatEther(mainBalance),
+                    balanceWei: mainBalance.toString()
+                };
+            } catch (error) {
+                console.error('Error fetching main wallet:', error);
+                mainWalletInfo = {
+                    error: 'Failed to load main wallet',
+                    details: error.message
+                };
+            }
+        }
+
+        // Sample first 5 wallets for balance checking (to avoid rate limiting)
+        const sampleSize = Math.min(5, wallets.length);
+        const sampleWallets = [];
+        let totalETH = ethers.BigNumber.from(0);
+        let fundedWallets = 0;
+        
+        for (let i = 0; i < sampleSize; i++) {
+            try {
+                const balance = await provider.getBalance(wallets[i][0]);
+                const balanceETH = ethers.utils.formatEther(balance);
+                
+                sampleWallets.push({
+                    index: i,
+                    address: wallets[i][0],
+                    balance: balanceETH,
+                    balanceWei: balance.toString()
+                });
+                
+                totalETH = totalETH.add(balance);
+                if (balance.gt(0)) fundedWallets++;
+                
+                // Small delay to avoid rate limiting
+                if (i < sampleSize - 1) await sleep(100);
+                
+            } catch (error) {
+                console.error(`Error checking wallet ${i}:`, error);
+                sampleWallets.push({
+                    index: i,
+                    address: wallets[i][0],
+                    balance: "0",
+                    balanceWei: "0",
+                    error: error.message
+                });
+            }
+        }
+
+        const avgBalance = sampleSize > 0 ? 
+            ethers.utils.formatEther(totalETH.div(sampleSize)) : "0";
+
+        res.json({
+            success: true,
+            totalWallets: wallets.length,
+            sampleSize: sampleSize,
+            sampleWallets: sampleWallets,
+            mainWallet: mainWalletInfo,
+            summary: {
+                totalETHSample: ethers.utils.formatEther(totalETH),
+                avgBalance: avgBalance,
+                fundedWallets: fundedWallets,
+                emptyWallets: sampleSize - fundedWallets,
+                estimatedTotalValue: parseFloat(avgBalance) * wallets.length
+            },
+            firstWallet: wallets.length > 0 ? wallets[0][0] : null,
+            lastWallet: wallets.length > 0 ? wallets[wallets.length - 1][0] : null
+        });
+
+    } catch (error) {
+        console.error('Error fetching wallet stats:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch wallet statistics',
+            details: error.message
+        });
+    }
+});
+
+// Get specific wallet details
+app.get('/api/wallets/:index', async (req, res) => {
+    try {
+        const index = parseInt(req.params.index);
+        const wallets = loadWallets();
+        
+        if (index < 0 || index >= wallets.length) {
+            return res.status(404).json({
+                success: false,
+                error: 'Wallet index out of range'
+            });
+        }
+
+        const walletAddress = wallets[index][0];
+        const balance = await provider.getBalance(walletAddress);
+        
+        res.json({
+            success: true,
+            index: index,
+            address: walletAddress,
+            balance: ethers.utils.formatEther(balance),
+            balanceWei: balance.toString(),
+            hasPrivateKey: true
+        });
+
+    } catch (error) {
+        console.error('Error fetching wallet details:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch wallet details',
+            details: error.message
+        });
+    }
+});
+
+// Get main wallet detailed information
+app.get('/api/wallet/main', async (req, res) => {
+    try {
+        if (!config.fundingPrivateKey) {
+            return res.json({
+                success: false,
+                error: 'Main wallet not configured (PK_MAIN missing in .env)'
+            });
+        }
+
+        const mainWallet = new ethers.Wallet(config.fundingPrivateKey, provider);
+        const balance = await provider.getBalance(mainWallet.address);
+        
+        // Get transaction count (nonce)
+        const nonce = await provider.getTransactionCount(mainWallet.address);
+        
+        // Get recent gas price for cost estimation
+        const gasPrice = await provider.getGasPrice();
+        const gasPriceGwei = ethers.utils.formatUnits(gasPrice, 9);
+
+        res.json({
+            success: true,
+            address: mainWallet.address,
+            balance: ethers.utils.formatEther(balance),
+            balanceWei: balance.toString(),
+            nonce: nonce,
+            gasPrice: gasPriceGwei,
+            network: await provider.getNetwork(),
+            canFund: balance.gt(ethers.utils.parseEther("0.001")) // Can fund if > 0.001 ETH
+        });
+
+    } catch (error) {
+        console.error('Error fetching main wallet:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch main wallet information',
+            details: error.message
+        });
+    }
+});
+
+// Create new wallets via API
+app.post('/api/wallets/create', async (req, res) => {
+    try {
+        const { count = 10 } = req.body;
+        
+        if (!isValidNumber(count, 1, 10000)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Count must be between 1 and 10000'
+            });
+        }
+
+        const existingWallets = loadWallets();
+        const newWallets = [];
+        
+        for (let i = 0; i < count; i++) {
+            const wallet = ethers.Wallet.createRandom();
+            newWallets.push([wallet.address, wallet.privateKey]);
+        }
+        
+        const allWallets = [...existingWallets, ...newWallets];
+        saveWallets(allWallets);
+
+        res.json({
+            success: true,
+            created: count,
+            totalWallets: allWallets.length,
+            newAddresses: newWallets.map(w => w[0])
+        });
+
+    } catch (error) {
+        console.error('Error creating wallets:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create wallets',
+            details: error.message
+        });
+    }
+});
+
+// ============================================================================
+// TOKEN DATABASE APIs  
+// ============================================================================
+
+// Get all tokens in database
+app.get('/api/tokens', (req, res) => {
+    try {
+        const tokens = loadTokens();
+        
+        // Group tokens by symbol for better organization
+        const tokensBySymbol = {};
+        tokens.forEach(token => {
+            if (!tokensBySymbol[token.symbol]) {
+                tokensBySymbol[token.symbol] = [];
+            }
+            tokensBySymbol[token.symbol].push(token);
+        });
+
+        res.json({
+            success: true,
+            totalTokens: tokens.length,
+            uniqueSymbols: Object.keys(tokensBySymbol).length,
+            tokens: tokens,
+            tokensBySymbol: tokensBySymbol,
+            recentlyAdded: tokens
+                .sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt))
+                .slice(0, 10)
+        });
+
+    } catch (error) {
+        console.error('Error fetching tokens:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch tokens',
+            details: error.message
+        });
+    }
+});
+
+// Get specific token by address
+app.get('/api/tokens/:address', (req, res) => {
+    try {
+        const address = req.params.address;
+        
+        if (!isValidTokenAddress(address)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid token address format'
+            });
+        }
+
+        const token = getTokenByAddress(address);
+        
+        if (!token) {
+            return res.status(404).json({
+                success: false,
+                error: 'Token not found in database'
+            });
+        }
+
+        res.json({
+            success: true,
+            token: token
+        });
+
+    } catch (error) {
+        console.error('Error fetching token:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch token',
+            details: error.message
+        });
+    }
+});
+
+// Add new token(s) to database
+app.post('/api/tokens/add', async (req, res) => {
+    try {
+        const { addresses } = req.body;
+        
+        if (!addresses || !Array.isArray(addresses) || addresses.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Addresses array is required'
+            });
+        }
+
+        // Validate all addresses
+        const invalidAddresses = addresses.filter(addr => !isValidTokenAddress(addr));
+        if (invalidAddresses.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: `Invalid addresses: ${invalidAddresses.join(', ')}`
+            });
+        }
+
+        // Add tokens using the enhanced function from your codebase
+        const result = await addTokens(addresses);
+
+        res.json({
+            success: true,
+            message: `Successfully processed ${addresses.length} token addresses`,
+            added: result.added.length,
+            failed: result.failed.length,
+            duplicates: result.summary.duplicateCount,
+            totalTokens: result.total,
+            details: {
+                successful: result.added,
+                failed: result.failed
+            }
+        });
+
+    } catch (error) {
+        console.error('Error adding tokens:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to add tokens',
+            details: error.message
+        });
+    }
+});
+
+// Search tokens by symbol
+app.get('/api/tokens/search/:symbol', (req, res) => {
+    try {
+        const symbol = req.params.symbol;
+        const tokens = getTokensBySymbol(symbol);
+
+        res.json({
+            success: true,
+            symbol: symbol,
+            found: tokens.length,
+            tokens: tokens
+        });
+
+    } catch (error) {
+        console.error('Error searching tokens:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to search tokens',
+            details: error.message
+        });
+    }
+});
+
+// Get default tokens configuration
+app.get('/api/tokens/defaults', (req, res) => {
+    try {
+        res.json({
+            success: true,
+            defaultTokens: defaultTokens,
+            v2Tokens: defaultTokens.V2 || [],
+            v3Tokens: defaultTokens.V3 || []
+        });
+
+    } catch (error) {
+        console.error('Error fetching default tokens:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch default tokens',
+            details: error.message
+        });
+    }
+});
+
+// ============================================================================
+// SYSTEM CONFIGURATION APIs
+// ============================================================================
+
+// Get current configuration
+app.get('/api/config', (req, res) => {
+    try {
+        // Don't expose sensitive data like private keys
+        const safeConfig = {
+            rpcUrl: config.rpcUrl ? config.rpcUrl.replace(/\/[a-zA-Z0-9]+$/, '/***') : null,
+            hasMainWallet: !!config.fundingPrivateKey,
+            defaultWalletCount: config.defaultWalletCount,
+            defaultChunkSize: config.defaultChunkSize,
+            defaultBatchSize: config.defaultBatchSize,
+            defaultV3Fee: config.defaultV3Fee,
+            gasSettings: {
+                gasMax: config.gasSettings.gasMax,
+                hasCustomGasPrice: !!config.gasSettings.gasPrice,
+                hasCustomGasLimit: !!config.gasSettings.gasLimit
+            },
+            contracts: contracts
+        };
+
+        res.json({
+            success: true,
+            config: safeConfig
+        });
+
+    } catch (error) {
+        console.error('Error fetching config:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch configuration',
+            details: error.message
+        });
+    }
+});
+
+// Get comprehensive dashboard data (combines everything)
+app.get('/api/dashboard', async (req, res) => {
+    try {
+        // Get wallet stats (limited sample to avoid long response time)
+        const wallets = loadWallets();
+        let mainWalletInfo = null;
+        
+        if (config.fundingPrivateKey) {
+            try {
+                const mainWallet = new ethers.Wallet(config.fundingPrivateKey, provider);
+                const mainBalance = await provider.getBalance(mainWallet.address);
+                
+                mainWalletInfo = {
+                    address: mainWallet.address,
+                    balance: ethers.utils.formatEther(mainBalance),
+                    balanceWei: mainBalance.toString()
+                };
+            } catch (error) {
+                mainWalletInfo = { error: 'Failed to load main wallet' };
+            }
+        }
+
+        // Get token stats
+        const tokens = loadTokens();
+        const tokensBySymbol = {};
+        tokens.forEach(token => {
+            if (!tokensBySymbol[token.symbol]) {
+                tokensBySymbol[token.symbol] = [];
+            }
+            tokensBySymbol[token.symbol].push(token);
+        });
+
+        // Get gas prices
+        const gasData = await calculateGasPrices();
+
+        res.json({
+            success: true,
+            timestamp: new Date().toISOString(),
+            dashboard: {
+                wallets: {
+                    total: wallets.length,
+                    firstAddress: wallets.length > 0 ? wallets[0][0] : null,
+                    lastAddress: wallets.length > 0 ? wallets[wallets.length - 1][0] : null
+                },
+                mainWallet: mainWalletInfo,
+                tokens: {
+                    total: tokens.length,
+                    uniqueSymbols: Object.keys(tokensBySymbol).length,
+                    recent: tokens
+                        .sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt))
+                        .slice(0, 5)
+                },
+                gas: {
+                    ...gasData
+                },
+                system: {
+                    activeProcesses: activeProcesses.size,
+                    wsConnections: wsConnections.size,
+                    uptime: process.uptime()
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch dashboard data',
+            details: error.message
+        });
+    }
+});
 
 // Enhanced execute endpoint with real-time streaming
 app.post('/api/execute', async (req, res) => {
