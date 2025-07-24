@@ -251,7 +251,52 @@ input[type="radio"][value="no"]:checked {
             </div>
         </div>
 
-       
+
+       <div class=" mx-auto">
+        <div class="glass rounded-xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-white font-semibold text-xl">💰 Wallet Balances</h3>
+                <div class="flex gap-3">
+                    <button onclick="fetchWalletBalances()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    🔄 Load Data
+                </button>
+                <button onclick="refreshBalances()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                    🔄 Update Balances
+                </button>
+                </div>
+            </div>
+            
+            <!-- Wallet Table -->
+            <div class="bg-white/5 rounded-lg overflow-auto h-[500px]">
+                <div class="overflow-auto">
+                    <table class="w-full">
+                        <thead class="bg-white/10">
+                            <tr>
+                                <th class="text-left p-3 text-white text-sm font-medium">Index</th>
+                                <th class="text-left p-3 text-white text-sm font-medium">Address</th>
+                                <th class="text-right p-3 text-white text-sm font-medium">Balance (ETH)</th>
+                                <th class="text-right p-3 text-white text-sm font-medium">Balance (USD)</th>
+                                <th class="text-right p-3 text-white text-sm font-medium">Balance (Wei)</th>
+                                <th class="text-center p-3 text-white text-sm font-medium">Status</th>
+                                <th class="text-center p-3 text-white text-sm font-medium">Last Checked</th>
+                            </tr>
+                        </thead>
+                        <tbody id="walletTableBody" class="">
+                            <tr class="border-b border-white/10">
+                                <td colspan="6" class="p-8 text-center text-gray-400">
+                                    Click "Load Data" to display wallet information
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+       <br />
 
         <!-- Main Controls Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -750,7 +795,7 @@ input[type="radio"][value="no"]:checked {
         </div>
     </div>
 </div>
-           
+           <br />
 <!-- Contract Address Finder -->
 <div class="bg-white/5 rounded-lg p-4">
    <h4 class="text-purple-300 font-medium mb-4 flex items-center">
@@ -810,42 +855,119 @@ input[type="radio"][value="no"]:checked {
 
 
 <br />
-        <!-- Statistics Panel -->
-        <div class="glass rounded-xl p-6 mb-6">
-            <div class="flex items-center justify-between mb-6">
-                <h3 class="text-white font-semibold text-xl">📊 Live Statistics</h3>
-                <button onclick="refreshAllStats()" 
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
-                    🔄 Refresh All
-                </button>
+       <!-- Enhanced Statistics Panel -->
+<div class="glass rounded-xl p-6 mb-6">
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center space-x-3">
+            <h3 class="text-white font-semibold text-xl">📊 Live Statistics</h3>
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="refreshAllStats()" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center space-x-2"
+                    id="refreshBtn">
+                <span>🔄</span>
+                <span>Refresh All</span>
+            </button>
+            <button onclick="toggleAutoRefresh()" 
+                    class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                    id="autoRefreshBtn">
+                ⏱️ Auto: ON
+            </button>
+        </div>
+    </div>
+    
+    <!-- Main Stats Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <div class="stat-card bg-white/10 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-green-400" id="successfulOps">-</div>
+            <div class="text-green-200 text-sm">Successful</div>
+            <div class="text-xs text-green-300 mt-1" id="successfulChange">+0 today</div>
+        </div>
+        <div class="stat-card bg-white/10 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-red-400" id="failedOps">-</div>
+            <div class="text-red-200 text-sm">Failed</div>
+            <div class="text-xs text-red-300 mt-1" id="failedChange">+0 today</div>
+        </div>
+        <div class="stat-card bg-white/10 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-blue-400" id="successRate">-%</div>
+            <div class="text-blue-200 text-sm">Success Rate</div>
+            <div class="text-xs text-blue-300 mt-1" id="successRateChange">0% today</div>
+        </div>
+        <div class="stat-card bg-white/10 rounded-lg p-4 text-center">
+            <div class="text-1xl font-bold text-purple-400" id="totalGasUsed">-</div>
+            <div class="text-sxl font-bold text-purple-200" id="totalGasUsedUSD">--</div>
+            <div class="text-purple-200 text-sm">Gas Used (ETH)</div>
+            <div class="text-xs text-purple-300 mt-1" id="gasUsedChange">+0 today</div>
+        </div>
+        <div class="stat-card bg-white/10 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-yellow-400" id="fundedWallets">-</div>
+            <div class="text-yellow-200 text-sm">Funded Wallets</div>
+            <div class="text-xs text-yellow-300 mt-1" id="walletsChange">active</div>
+        </div>
+        <div class="stat-card bg-white/10 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-indigo-400" id="totalBalance">-</div>
+            <div class="text-indigo-200 text-sm">Total Balance</div>
+            <div class="text-xs text-indigo-300 mt-1" id="balanceChange">ETH</div>
+        </div>
+    </div>
+    
+    <!-- Additional Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div class="stat-card bg-white/10 rounded-lg p-3 text-center">
+            <div class="text-lg font-bold text-orange-400" id="gasLimitExceeded">-</div>
+            <div class="text-orange-200 text-xs">Gas Limit Exceeded</div>
+        </div>
+        <div class="stat-card bg-white/10 rounded-lg p-3 text-center">
+            <div class="text-lg font-bold text-cyan-400" id="totalTokensSwapped">-</div>
+            <div class="text-cyan-200 text-xs">Tokens Swapped</div>
+        </div>
+        <div class="stat-card bg-white/10 rounded-lg p-3 text-center">
+            <div class="text-lg font-bold text-pink-400" id="avgGasPerTx">-</div>
+            <div class="text-pink-200 text-xs">Avg Gas/TX</div>
+        </div>
+        <div class="stat-card bg-white/10 rounded-lg p-3 text-center">
+            <div class="text-lg font-bold text-teal-400" id="todayTransactions">-</div>
+            <div class="text-teal-200 text-xs">Today's TXs</div>
+        </div>
+    </div>
+    
+    <!-- Operation Types Breakdown -->
+    <div class="bg-white/5 rounded-lg p-4">
+        <h4 class="text-white font-medium text-sm mb-3">🔧 Operation Types (Today)</h4>
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-xs">
+            <div class="text-center">
+                <div class="text-white font-bold" id="v2Swaps">-</div>
+                <div class="text-gray-300">V2 Swaps</div>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div class="bg-white/10 rounded-lg p-4 text-center">
-                    <div class="text-2xl font-bold text-green-400" id="successfulOps">0</div>
-                    <div class="text-green-200 text-sm">Successful</div>
-                </div>
-                <div class="bg-white/10 rounded-lg p-4 text-center">
-                    <div class="text-2xl font-bold text-red-400" id="failedOps">0</div>
-                    <div class="text-red-200 text-sm">Failed</div>
-                </div>
-                <div class="bg-white/10 rounded-lg p-4 text-center">
-                    <div class="text-2xl font-bold text-blue-400" id="successRate">0%</div>
-                    <div class="text-blue-200 text-sm">Success Rate</div>
-                </div>
-                <div class="bg-white/10 rounded-lg p-4 text-center">
-                    <div class="text-2xl font-bold text-purple-400" id="totalGasUsed">0.000</div>
-                    <div class="text-purple-200 text-sm">Gas Used (ETH)</div>
-                </div>
-                <div class="bg-white/10 rounded-lg p-4 text-center">
-                    <div class="text-2xl font-bold text-yellow-400" id="fundedWallets">0</div>
-                    <div class="text-yellow-200 text-sm">Funded Wallets</div>
-                </div>
-                <div class="bg-white/10 rounded-lg p-4 text-center">
-                    <div class="text-2xl font-bold text-indigo-400" id="totalBalance">0.000</div>
-                    <div class="text-indigo-200 text-sm">Total Balance</div>
-                </div>
+            <div class="text-center">
+                <div class="text-white font-bold" id="v3Swaps">-</div>
+                <div class="text-gray-300">V3 Swaps</div>
+            </div>
+            <div class="text-center">
+                <div class="text-white font-bold" id="airdrops">-</div>
+                <div class="text-gray-300">Airdrops</div>
+            </div>
+            <div class="text-center">
+                <div class="text-white font-bold" id="volumeOps">-</div>
+                <div class="text-gray-300">Volume</div>
+            </div>
+            <div class="text-center">
+                <div class="text-white font-bold" id="deployments">-</div>
+                <div class="text-gray-300">Deployments</div>
+            </div>
+            <div class="text-center">
+                <div class="text-white font-bold" id="withdrawals">-</div>
+                <div class="text-gray-300">Withdrawals</div>
             </div>
         </div>
+    </div>
+    
+    <!-- Last Updated -->
+    <div class="flex justify-between items-center mt-4 text-xs text-gray-400">
+        <span>Last updated: <span id="lastUpdated">Never</span></span>
+        <span>Auto-refresh: <span id="refreshInterval">5s</span></span>
+    </div>
+</div>
 
          <!-- Emergency Controls -->
          <div class="bg-red-900/30 border border-red-500/50 rounded-xl p-6 mb-6">
@@ -1075,6 +1197,101 @@ input[type="radio"][value="no"]:checked {
         </div>
     </div>
 
+    <!-- Wallet Manager Modal -->
+    <div id="walletModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-40 flex items-center justify-center p-4">
+        <div class="glass rounded-xl p-6 max-w-6xl w-full max-h-[80vh] overflow-hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-white font-semibold text-xl">👛 Wallet Manager</h3>
+                <button onclick="hideWalletManager()" class="text-white hover:text-red-300 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Search and Filter Controls -->
+            <div class="mb-4 space-y-4">
+                <div class="flex space-x-4">
+                    <div class="flex-1">
+                        <input type="text" id="walletSearch" placeholder="Search by address, index, or balance..."
+                               class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <button onclick="clearWalletSearch()" 
+                            class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors">
+                        Clear
+                    </button>
+                    <button onclick="refreshWalletList()" 
+                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        🔄 Refresh
+                    </button>
+                </div>
+                
+                <!-- Filter options -->
+                <div class="flex flex-wrap gap-2">
+                    <span class="text-gray-300 text-sm">Filter:</span>
+                    <button onclick="filterWallets('all')" 
+                            class="px-3 py-1 bg-gray-600/50 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+                            id="filterAll">
+                        All Wallets
+                    </button>
+                    <button onclick="filterWallets('funded')" 
+                            class="px-3 py-1 bg-green-600/50 hover:bg-green-600 text-white text-sm rounded-lg transition-colors"
+                            id="filterFunded">
+                        Funded Only
+                    </button>
+                    <button onclick="filterWallets('empty')" 
+                            class="px-3 py-1 bg-red-600/50 hover:bg-red-600 text-white text-sm rounded-lg transition-colors"
+                            id="filterEmpty">
+                        Empty Only
+                    </button>
+                </div>
+            </div>
+
+            <!-- Wallet Stats Summary -->
+            <div id="walletSummary" class="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                <!-- Summary will be populated here -->
+            </div>
+            
+            <!-- Wallet List -->
+            <div id="walletModalContent" class="overflow-y-auto max-h-96">
+                <!-- Wallet list will be populated here -->
+            </div>
+            
+            <!-- Bulk Actions -->
+            <div class="mt-4 pt-4 border-t border-white/20">
+                <div class="flex flex-wrap gap-3">
+                    <button onclick="exportWalletList()" 
+                            class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors">
+                        📥 Export CSV
+                    </button>
+                    <button onclick="copyAllAddresses()" 
+                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        📋 Copy All Addresses
+                    </button>
+                    <button onclick="showWalletStats()" 
+                            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
+                        📊 Detailed Stats
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token Manager Modal -->
+    <div id="tokenModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-40 flex items-center justify-center p-4">
+        <div class="glass rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-white font-semibold text-xl">🪙 Token Database Manager</h3>
+                <button onclick="hideTokenManager()" class="text-white hover:text-red-300 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="tokenModalContent" class="overflow-y-auto max-h-96">
+                <!-- Token list will be populated here -->
+            </div>
+
     
 
     <!-- Token Manager Modal -->
@@ -1098,6 +1315,9 @@ input[type="radio"][value="no"]:checked {
             <span class="text-white font-medium">Processing...</span>
         </div>
     </div>
+
+
+    
     <script>
 // Global state management
 let automationProcesses = new Set();
@@ -2349,6 +2569,14 @@ function updateAirdropPreview() {
     document.getElementById('totalusdairdropcostrange').textContent = formatNumberCurrency(totalEth * ethPrice);
 }
 
+async function refreshBalances(){
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = 'Fetching...';
+    button.classList.add('opacity-50');
+    await executeCommand('balances', [], button);
+}
+
 function updateBatchAirdropPreview() {
     const start = parseInt(document.getElementById('airdropBatchStart').value) || 0;
     const end = parseInt(document.getElementById('airdropBatchEnd').value) || 500;
@@ -2556,7 +2784,7 @@ function addToHistory(command) {
 function updateStats() {
     document.getElementById('successfulOps').textContent = stats.successfulOps;
     document.getElementById('failedOps').textContent = stats.failedOps;
-    document.getElementById('totalGasUsed').textContent = stats.totalGasUsed.toFixed(6);
+    document.getElementById('totalGasUsed').textContent = parseFloat(stats.totalGasUsed.toFixed(6)).fixed(4);
     
     const total = stats.successfulOps + stats.failedOps;
     const rate = total > 0 ? ((stats.successfulOps / total) * 100).toFixed(1) : 0;
@@ -2636,16 +2864,6 @@ const formatNumbeCompact = (value) => {
       return Number_Format_USD.format(Number(value));
     } catch(err) {
       return value;
-    }
-  };
-
-  const formatAddress = (address, start = 6, end = 4) => {
-    try {
-      if (!address) return '';
-      if (address.length <= start + end) return address;
-      return `${address.slice(0, start)}...${address.slice(-end)}`;
-    } catch(err) {
-      return `0x000...000`;
     }
   };
 
@@ -3506,6 +3724,408 @@ setInterval(() => {
         initializeWebSocket();
     }
 }, 30000);
+
+
+
+// Statistics API Configuration
+const STATS_API_BASE = 'http://localhost:3000/api/stats';
+let autoRefreshEnabled = true;
+let refreshIntervalId = null;
+let lastStatsData = null;
+
+// Statistics Manager Class
+class StatsManager {
+    constructor(apiBaseUrl = STATS_API_BASE) {
+        this.apiBaseUrl = apiBaseUrl;
+        this.isLoading = false;
+    }
+
+    async fetchLiveStats() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/live`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching live stats:', error);
+            this.updateConnectionStatus(false, error.message);
+            return null;
+        }
+    }
+
+    async fetchSummary() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/summary`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching summary:', error);
+            return null;
+        }
+    }
+
+    async fetchDailyStats(date = null) {
+        try {
+            const url = date ? `${this.apiBaseUrl}/daily/${date}` : `${this.apiBaseUrl}/daily`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching daily stats:', error);
+            return null;
+        }
+    }
+
+    updateConnectionStatus(connected, message = '') {
+        const statusDot = document.getElementById('connectionStatus');
+        const statusText = document.getElementById('statusText');
+        
+        if (connected) {
+            statusDot.className = 'w-2 h-2 bg-green-400 rounded-full pulse-dot';
+            statusText.textContent = 'Connected';
+            statusText.className = 'text-xs text-green-300';
+        } else {
+            statusDot.className = 'w-2 h-2 bg-red-400 rounded-full';
+            statusText.textContent = `Error: ${message}`;
+            statusText.className = 'text-xs text-red-300';
+        }
+    }
+
+    formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toString();
+    }
+
+    formatGas(gasValue) {
+        const num = parseFloat(gasValue);
+        if (num >= 1) return num.toFixed(3);
+        if (num >= 0.001) return num.toFixed(6);
+        return num.toFixed(9);
+    }
+
+    updateDashboard(stats, dailyStats = null) {
+        if (!stats) return;
+
+        const ethPrice = document.getElementById("ethPrice").innerHTML
+
+        // Update main stats
+        document.getElementById('successfulOps').textContent = this.formatNumber(stats.successful || 0);
+        document.getElementById('failedOps').textContent = this.formatNumber(stats.failed || 0);
+        document.getElementById('successRate').textContent = stats.successRate || '0%';
+        document.getElementById('totalGasUsed').textContent = `${this.formatNumber(stats.gasUsed || '0')} ETH`;
+        document.getElementById('totalGasUsedUSD').textContent = !isNaN(stats.gasUsed * ethPrice) ?  `${formatNumberCurrency(stats.gasUsed * ethPrice )}` : '--';
+        document.getElementById('fundedWallets').textContent = this.formatNumber(stats.fundedWallets || 0);
+        document.getElementById('totalBalance').textContent = parseFloat(stats.totalBalance || 0).toFixed(4);
+
+        // Update additional stats
+        document.getElementById('gasLimitExceeded').textContent = this.formatNumber(stats.gasLimitExceeded || 0);
+        document.getElementById('totalTokensSwapped').textContent = this.formatNumber(stats.totalTokensSwapped || 0);
+        document.getElementById('avgGasPerTx').textContent = stats.averageGasPerTx ? this.formatNumber(stats.averageGasPerTx) : '-';
+
+        // Update daily changes if available
+        if (dailyStats) {
+            document.getElementById('successfulChange').textContent = `+${dailyStats.successful || 0} today`;
+            document.getElementById('failedChange').textContent = `+${dailyStats.failed || 0} today`;
+            document.getElementById('successRateChange').textContent = `${dailyStats.successRate || '0%'} today`;
+            document.getElementById('gasUsedChange').textContent = `+${this.formatGas(dailyStats.gasUsed || '0')} today`;
+            document.getElementById('todayTransactions').textContent = this.formatNumber(dailyStats.total || 0);
+
+            // Update operation types
+            if (dailyStats.operationTypes) {
+                document.getElementById('v2Swaps').textContent = dailyStats.operationTypes.V2_swaps || 0;
+                document.getElementById('v3Swaps').textContent = dailyStats.operationTypes.V3_swaps || 0;
+                document.getElementById('multiswaps').textContent = dailyStats.operationTypes.multiswaps || 0;
+                document.getElementById('airdrops').textContent = dailyStats.operationTypes.airdrops || 0;
+                document.getElementById('volumeOps').textContent = dailyStats.operationTypes.volume_operations || 0;
+                document.getElementById('deployments').textContent = dailyStats.operationTypes.deployments || 0;
+                document.getElementById('withdrawals').textContent = dailyStats.operationTypes.withdrawals || 0;
+            }
+        }
+
+        // Update last updated time
+        document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+        
+        // Update connection status
+        this.updateConnectionStatus(true);
+        
+        // Store for comparison
+        lastStatsData = stats;
+    }
+
+    showLoadingState() {
+        const elements = [
+            'successfulOps', 'failedOps', 'successRate', 'totalGasUsed', 
+            'fundedWallets', 'totalBalance', 'gasLimitExceeded', 'totalTokensSwapped'
+        ];
+        
+        elements.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.className += ' loading-skeleton';
+                el.textContent = '...';
+            }
+        });
+    }
+
+    hideLoadingState() {
+        const elements = document.querySelectorAll('.loading-skeleton');
+        elements.forEach(el => {
+            el.className = el.className.replace(' loading-skeleton', '');
+        });
+    }
+}
+
+// Initialize Stats Manager
+const statsManager = new StatsManager();
+
+// Main Functions
+async function refreshAllStats() {
+    if (statsManager.isLoading) return;
+    
+    statsManager.isLoading = true;
+    const refreshBtn = document.getElementById('refreshBtn');
+    refreshBtn.disabled = true;
+    refreshBtn.innerHTML = '<span>⏳</span><span>Loading...</span>';
+    
+    statsManager.showLoadingState();
+    
+    try {
+        // Fetch both live and daily stats
+        const [liveStats, dailyStats] = await Promise.all([
+            statsManager.fetchLiveStats(),
+            statsManager.fetchDailyStats()
+        ]);
+        
+        if (liveStats) {
+            statsManager.updateDashboard(liveStats, dailyStats);
+        } else {
+            throw new Error('Failed to fetch statistics');
+        }
+        
+    } catch (error) {
+        console.error('Error refreshing stats:', error);
+        statsManager.updateConnectionStatus(false, error.message);
+    } finally {
+        statsManager.hideLoadingState();
+        statsManager.isLoading = false;
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = '<span>🔄</span><span>Refresh All</span>';
+    }
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    const btn = document.getElementById('autoRefreshBtn');
+    
+    if (autoRefreshEnabled) {
+        btn.textContent = '⏱️ Auto: ON';
+        btn.className = 'bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors';
+        startAutoRefresh();
+    } else {
+        btn.textContent = '⏱️ Auto: OFF';
+        btn.className = 'bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors';
+        stopAutoRefresh();
+    }
+}
+
+function startAutoRefresh(intervalMs = 5000) {
+    if (refreshIntervalId) clearInterval(refreshIntervalId);
+    
+    refreshIntervalId = setInterval(() => {
+        if (autoRefreshEnabled && !statsManager.isLoading) {
+            refreshAllStats();
+        }
+    }, intervalMs);
+    
+    document.getElementById('refreshInterval').textContent = `${intervalMs / 1000}s`;
+}
+
+function stopAutoRefresh() {
+    if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initial stats load
+    refreshAllStats();
+    
+    // Start auto-refresh
+    startAutoRefresh();
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            stopAutoRefresh();
+        } else if (autoRefreshEnabled) {
+            refreshAllStats();
+            startAutoRefresh();
+        }
+    });
+});
+
+
+ // Sample data based on your format
+        
+        function formatAddress(address) {
+            if (!address) return '';
+            return `${address.slice(0, 6)}...${address.slice(-4)}`;
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+
+        function formatBalance(balanceETH) {
+            if (!balanceETH) return '0.000000';
+            return parseFloat(balanceETH).toFixed(6);
+        }
+
+        function getStatusColor(status) {
+            switch(status) {
+                case 'funded': return 'bg-green-600';
+                case 'empty': return 'bg-red-600';
+                case 'error': return 'bg-red-600';
+                default: return 'bg-gray-600';
+            }
+        }
+
+        function getBalanceColor(balanceETH) {
+            const balance = parseFloat(balanceETH);
+            if (balance === 0) return 'text-red-400';
+            if (balance < 0.001) return 'text-yellow-400';
+            if (balance < 0.01) return 'text-blue-400';
+            return 'text-green-400';
+        }
+
+        // Function to load your actual API data
+        function loadApiData(walletData) {
+            const tableBody = document.getElementById('walletTableBody');
+            tableBody.innerHTML = '';
+            const ethPriceElement = parseFloat(document.getElementById("ethPrice").textContent);
+
+
+            // Handle both object and array formats
+            const wallets = Array.isArray(walletData) ? walletData : Object.values(walletData);
+
+            wallets.forEach((wallet) => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-white/10 hover:bg-white/5';
+                
+                row.innerHTML = `
+                    <td class="p-3 text-gray-800 text-sm">${wallet.index}</td>
+                    <td class="p-3">
+                        <div class="flex flex-col">
+                            <span class="text-white font-mono text-sm">${formatAddress(wallet.address)}</span>
+                            <span class="text-gray-800 text-xs font-mono">${wallet.address}</span>
+                        </div>
+                    </td>
+                    <td class="p-3 text-right">
+                        <span class="${getBalanceColor(wallet.balanceETH)} font-bold text-sm">
+                            ${formatBalance(wallet.balanceETH)}
+                        </span>
+                    </td>
+                    <td class="p-3 text-right">
+                        <span class="text-gray-800 text-xs font-mono">$${formatBalance(wallet.balanceETH * ethPriceElement)}</span>
+                    </td>
+                    <td class="p-3 text-right">
+                        <span class="text-gray-800 text-xs font-mono">${wallet.balanceWei}</span>
+                    </td>
+                    <td class="p-3 text-center">
+                        <span class="${getStatusColor(wallet.status)} text-white px-2 py-1 rounded text-xs capitalize">
+                            ${wallet.status}
+                        </span>
+                    </td>
+                    <td class="p-3 text-center text-gray-800 text-xs">
+                        ${formatDate(wallet.lastChecked)}
+                    </td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Auto-load data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchWalletBalances();
+        });
+        async function fetchWalletBalances() {
+            try {
+                const loadButton = document.querySelector('button');
+                loadButton.innerHTML = '⏳ Loading...';
+                loadButton.disabled = true;
+
+                const response = await fetch('/api/wallets/balances');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('API Response:', data);
+
+                // Handle different response formats
+                let wallets = [];
+                if (data.wallets) {
+                    // If data has a wallets property
+                    wallets = Array.isArray(data.wallets) ? data.wallets : Object.values(data.wallets);
+                } else if (Array.isArray(data)) {
+                    // If data is directly an array
+                    wallets = data;
+                } else if (typeof data === 'object') {
+                    // If data is an object with numbered keys
+                    wallets = Object.values(data);
+                }
+
+                if (wallets.length > 0) {
+                    loadApiData(wallets);
+                } else {
+                    document.getElementById('walletTableBody').innerHTML = `
+                        <tr class="border-b border-white/10">
+                            <td colspan="6" class="p-8 text-center text-yellow-400">
+                                No wallet data found
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                loadButton.innerHTML = '🔄 Load Data';
+                loadButton.disabled = false;
+
+            } catch (error) {
+                console.error('Error fetching wallet data:', error);
+                document.getElementById('walletTableBody').innerHTML = `
+                    <tr class="border-b border-white/10">
+                        <td colspan="6" class="p-8 text-center text-red-400">
+                            Error loading data: ${error.message}
+                        </td>
+                    </tr>
+                `;
+                
+                const loadButton = document.querySelector('button');
+                loadButton.innerHTML = '🔄 Load Data';
+                loadButton.disabled = false;
+            }
+        }
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    stopAutoRefresh();
+});
+
+window.onload = function(){
+    setTimeout(() => {
+        fetchWalletBalances()
+    }, 1000)
+}
+
+// Expose functions globally for manual calls
+window.refreshAllStats = refreshAllStats;
+window.toggleAutoRefresh = toggleAutoRefresh;
+window.statsManager = statsManager;
     </script>
 </body>
 </html>

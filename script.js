@@ -5,12 +5,21 @@ const path = require('path');
 const { start } = require('repl');
 require('dotenv').config();
 
+// const { trackTransaction, updateWalletStats, getLiveStats } = require('./source/stats-tracker');
+// const { 
+//     executeSwapWithStats, 
+//     trackBatchOperation, 
+//     executeBatchWithStats,
+//     createStatsWrapper 
+// } = require('./source/stats-integration');
+
 const { 
     config,
     provider,
     addTokens,
     addSingleToken,
     loadTokens,
+    getWalletBalances,
     saveTokens,
     getTokenByAddress,
     getTokensBySymbol,
@@ -38,6 +47,9 @@ const {
     createWalletsToTarget,
     checkWallets
 } = require("./helper")
+
+async function trackBatchOperation(){}
+async function trackTransaction(){}
 
 
 async function deployContract(tokenAddress) {
@@ -238,6 +250,7 @@ async function deployContract(tokenAddress) {
 
 // Individual operation functions
 async function sendAirdropWallets(start, end, wallets, totalEthAmount = null) {
+    const startTime = Date.now();
     try {
         if (!config.fundingPrivateKey) {
             throw new Error('PK_MAIN not configured in .env file');
@@ -323,7 +336,7 @@ async function sendAirdropWallets(start, end, wallets, totalEthAmount = null) {
         // Wait 2 seconds before returning (as in your example)
         await sleep(2000);
         
-        return {
+        const result =  {
             success: true,
             transactionHash: receipt.transactionHash,
             gasUsed: receipt.gasUsed.toString(),
@@ -332,13 +345,43 @@ async function sendAirdropWallets(start, end, wallets, totalEthAmount = null) {
             recipients: recipients.length
         };
         
+        trackTransaction({
+            success: result.success,
+            gasUsed: result.gasUsed,
+            gasCost: ethers.utils.formatEther(gasPrice.mul(receipt.gasUsed)),
+            operationType: "airdrops",
+            transactionHash: result.transactionHash,
+            additionalData: {
+                executionTime: Date.now() - startTime,
+                recipients: result.recipients,
+                totalAmount: result.totalAmount,
+                amountPerWallet: result.amountPerWallet
+            }
+        });
+
+        return result
+
     } catch (err) {
+
+         trackTransaction({
+            success: false,
+            gasUsed: "0",
+            gasCost: "0",
+            operationType: "airdrops",
+            additionalData: {
+                error: err.message,
+                executionTime: Date.now() - startTime,
+                targetRecipients: end - start
+            }
+        });
+
         errorLog(`Airdrop failed for range ${start}-${end}: ${err.message}`);
         throw err;
     }
 }
 
 async function executeSwap(index, wallets, tokenAddress) {
+    const startTime = Date.now();
     try {
         if (index >= wallets.length) {
             console.log(`Index ${index} exceeds wallet array length`);
@@ -496,7 +539,7 @@ async function executeSwap(index, wallets, tokenAddress) {
             console.log(`💰 Actual gas cost: ${actualGasCostETH} ETH (estimated: ${totalGasCostETH} ETH)`);
             console.log(`📊 Gas efficiency: ${gasEfficiency}%`);
             
-            return { 
+            const result =  { 
                 success: true, 
                 txHash: receipt.transactionHash,
                 gasUsed: receipt.gasUsed.toString(),
@@ -509,8 +552,38 @@ async function executeSwap(index, wallets, tokenAddress) {
                 tokenAddress,
                 hash: receipt.transactionHash // Legacy compatibility
             };
+
+            
+            trackTransaction({
+            success: result.success,
+            gasUsed: result.gasUsed,
+            gasCost: result.actualGasCost,
+            operationType: "V2_swaps",
+            tokensSwapped: 1,
+            walletAddress: result.walletAddress,
+            tokenAddress: result.tokenAddress,
+            transactionHash: result.txHash,
+            additionalData: {
+                walletIndex: index,
+                executionTime: Date.now() - startTime,
+                gasEfficiency: result.gasEfficiency
+            }});
+
+            return result;
         } else {
             console.log(`❌ Swap ${index} failed: ${receipt?.transactionHash || transaction.hash}`);
+
+            trackTransaction({
+            success: false,
+            gasUsed: "0",
+            gasCost: "0",
+            operationType: "V2_swaps",
+            additionalData: {
+                error: err.message,
+                walletIndex: index,
+                executionTime: Date.now() - startTime
+            }
+        });
             return { 
                 success: false, 
                 reason: 'transaction_failed', 
@@ -791,6 +864,8 @@ async function executeMultiSwap(index, wallets, tokens = null) {
 }
 
 async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddresses, startAt, endsAt, delayBetweenBatches = 2000, delayBetweenTx = 100) {
+    const batchStartTime = Date.now(); // Track total batch execution time
+    
     log(`Starting V2 Multi-Swap batch processing with enhanced controls:`);
     log(`• Batch size: ${batchSize}`);
     log(`• Token addresses: ${tokenAddresses ? tokenAddresses.split(',').length : 'default'} tokens`);
@@ -816,12 +891,43 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
 
     const wallets = loadWallets();
     if (wallets.length === 0) {
+        // Track batch failure - no wallets
+        trackTransaction({
+            success: false,
+            gasUsed: "0",
+            gasCost: "0",
+            operationType: "V2_swaps",
+            additionalData: {
+                error: 'no_wallets_found',
+                batchSize,
+                tokenCount: tokens?.length || 0,
+                executionTime: Date.now() - batchStartTime
+            }
+        }).catch(err => console.warn('Stats tracking failed:', err.message));
+        
         throw new Error('No wallets found. Create wallets first.');
     }
 
     // Validate range
     const actualEnd = Math.min(endsAt, wallets.length);
     if (startAt >= actualEnd) {
+        // Track batch failure - invalid range
+        trackTransaction({
+            success: false,
+            gasUsed: "0",
+            gasCost: "0",
+            operationType: "V2_swaps",
+            additionalData: {
+                error: 'invalid_range',
+                startAt,
+                endsAt,
+                actualEnd,
+                totalWallets: wallets.length,
+                batchSize,
+                executionTime: Date.now() - batchStartTime
+            }
+        }).catch(err => console.warn('Stats tracking failed:', err.message));
+        
         throw new Error(`Invalid range: startAt (${startAt}) must be less than endsAt (${actualEnd})`);
     }
 
@@ -831,6 +937,25 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
     let totalProcessed = 0;
     let batchCount = 0;
     let totalTokensSwapped = 0;
+    let totalGasCost = ethers.BigNumber.from("0");
+    let totalGasUsed = ethers.BigNumber.from("0");
+    
+    // Track batch operation start
+    trackTransaction({
+        success: true,
+        gasUsed: "0",
+        gasCost: "0",
+        operationType: "V2_swaps",
+        additionalData: {
+            batchSize,
+            tokenCount: tokens?.length || 0,
+            walletRange: `${startAt}-${actualEnd}`,
+            totalWallets: actualEnd - startAt,
+            delayBetweenBatches,
+            delayBetweenTx,
+            customTokensUsed: tokens?.length || 0
+        }
+    }).catch(err => console.warn('Stats tracking failed:', err.message));
     
     // Calculate total batches for progress tracking
     const totalBatches = Math.ceil((actualEnd - startAt) / batchSize);
@@ -839,6 +964,7 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
     for (let start = startAt; start < actualEnd; start += batchSize) {
         const end = Math.min(start + batchSize, actualEnd);
         batchCount++;
+        const currentBatchStartTime = Date.now();
         
         log(`🔄 Processing V2 Multi-Swap batch ${batchCount}/${totalBatches} (wallets ${start}-${end-1})`);
         
@@ -847,6 +973,8 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
         let batchFailed = 0;
         let batchGasExceeded = 0;
         let batchTokensSwapped = 0;
+        let batchGasCost = ethers.BigNumber.from("0");
+        let batchGasUsed = ethers.BigNumber.from("0");
         
         const batchPromises = [];
         
@@ -860,6 +988,19 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
                 executeMultiSwap(i, wallets, tokens)
                     .then((result) => {
                         totalProcessed++;
+                        
+                        // Accumulate gas statistics
+                        if (result.actualGasCost) {
+                            const gasCostWei = ethers.utils.parseUnits(result.actualGasCost, 18);
+                            totalGasCost = totalGasCost.add(gasCostWei);
+                            batchGasCost = batchGasCost.add(gasCostWei);
+                        }
+                        if (result.gasUsed) {
+                            const gasUsedBN = ethers.BigNumber.from(result.gasUsed);
+                            totalGasUsed = totalGasUsed.add(gasUsedBN);
+                            batchGasUsed = batchGasUsed.add(gasUsedBN);
+                        }
+                        
                         if (result.success) {
                             successfulSwaps++;
                             batchSuccessful++;
@@ -907,6 +1048,29 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
         // Wait for all transactions in current batch to complete
         const batchResults = await Promise.all(batchPromises);
         
+        // Track individual batch completion
+        const batchExecutionTime = Date.now() - currentBatchStartTime;
+        trackTransaction({
+            success: batchSuccessful > 0,
+            gasUsed: batchGasUsed.toString(),
+            gasCost: ethers.utils.formatEther(batchGasCost),
+            operationType: "V2_swaps",
+            tokensSwapped: batchTokensSwapped,
+            additionalData: {
+                batchNumber: batchCount,
+                totalBatches,
+                walletRange: `${start}-${end-1}`,
+                batchSuccessful,
+                batchFailed,
+                batchGasExceeded,
+                batchTokensSwapped,
+                batchSize: end - start,
+                executionTime: batchExecutionTime,
+                delayBetweenTx,
+                customTokensInBatch: tokens?.length || 0
+            }
+        }).catch(err => console.warn('Stats tracking failed:', err.message));
+        
         // Calculate batch success rate
         const batchTotal = batchResults.length;
         const batchSuccessRate = batchTotal > 0 ? ((batchSuccessful / batchTotal) * 100).toFixed(1) : '0.0';
@@ -936,6 +1100,7 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
     const totalWallets = actualEnd - startAt;
     const finalSuccessRate = totalProcessed > 0 ? ((successfulSwaps / totalProcessed) * 100).toFixed(2) : '0.00';
     const finalAvgTokensPerWallet = successfulSwaps > 0 ? (totalTokensSwapped / successfulSwaps).toFixed(2) : '0.00';
+    const totalExecutionTime = Date.now() - batchStartTime;
     
     log(`\n🎯 V2 Multi-Swap Batch Processing Complete!`);
     log(`📊 Final Results:`);
@@ -956,6 +1121,37 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
         log(`   • Router: Uniswap V2 compatible`);
     }
     
+    // Track final batch operation completion
+    trackTransaction({
+        success: successfulSwaps > 0,
+        gasUsed: totalGasUsed.toString(),
+        gasCost: ethers.utils.formatEther(totalGasCost),
+        operationType: "V2_swaps",
+        tokensSwapped: totalTokensSwapped,
+        additionalData: {
+            totalProcessed,
+            successfulSwaps,
+            failedSwaps,
+            gasLimitExceeded,
+            successRate: parseFloat(finalSuccessRate),
+            batchesProcessed: batchCount,
+            totalBatches,
+            walletsInRange: totalWallets,
+            totalTokensSwapped,
+            averageTokensPerWallet: parseFloat(finalAvgTokensPerWallet),
+            customTokensUsed: tokens ? tokens.length : 0,
+            swapType: 'V2_Multi',
+            routerType: 'V2',
+            totalExecutionTime,
+            batchSize,
+            delayBetweenBatches,
+            delayBetweenTx,
+            averageTimePerWallet: totalProcessed > 0 ? Math.round(totalExecutionTime / totalProcessed) : 0,
+            gasEfficiency: totalGasUsed.gt(0) ? 
+                ((successfulSwaps / totalProcessed) * 100).toFixed(2) : '0.00'
+        }
+    }).catch(err => console.warn('Stats tracking failed:', err.message));
+    
     // Return detailed results
     return {
         totalProcessed,
@@ -969,14 +1165,35 @@ async function multiSwapV2Batch(batchSize = config.defaultBatchSize, tokenAddres
         averageTokensPerWallet: parseFloat(finalAvgTokensPerWallet),
         customTokensUsed: tokens ? tokens.length : 0,
         swapType: 'V2_Multi',
-        routerType: 'V2'
+        routerType: 'V2',
+        totalExecutionTime,
+        totalGasCost: ethers.utils.formatEther(totalGasCost),
+        totalGasUsed: totalGasUsed.toString(),
+        averageTimePerWallet: totalProcessed > 0 ? Math.round(totalExecutionTime / totalProcessed) : 0
     };
 }
 
 async function executeMultiSwapV3(index, wallets, tokens = null) {
+    const startTime = Date.now(); // Track execution time for stats
+    
     try {
         if (index >= wallets.length) {
             console.log(`Index ${index} exceeds wallet array length`);
+            
+            // Track failed transaction - out of bounds
+            trackTransaction({
+                success: false,
+                gasUsed: "0",
+                gasCost: "0",
+                operationType: "V3_swaps",
+                additionalData: {
+                    error: 'index_out_of_bounds',
+                    walletIndex: index,
+                    totalWallets: wallets.length,
+                    executionTime: Date.now() - startTime
+                }
+            });
+            
             return { success: false, reason: 'index_out_of_bounds' };
         }
 
@@ -989,6 +1206,23 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
         
         if (currentBalance.lt(minBalance)) {
             console.log(`Insufficient balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+            
+            // Track failed transaction - insufficient funds
+            trackTransaction({
+                success: false,
+                gasUsed: "0",
+                gasCost: "0",
+                operationType: "V3_swaps",
+                walletAddress: signer.address,
+                additionalData: {
+                    error: 'insufficient_funds',
+                    walletIndex: index,
+                    walletBalance: ethers.utils.formatUnits(currentBalance, 18),
+                    minBalanceRequired: ethers.utils.formatUnits(minBalance, 18),
+                    executionTime: Date.now() - startTime
+                }
+            });
+            
             return { success: false, reason: 'insufficient_funds' };
         }
         
@@ -1019,6 +1253,25 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
         
         if (availableForSwap.lte(0)) {
             console.log(`Insufficient balance for swap after gas reserve. Balance: ${ethers.utils.formatUnits(currentBalance, 18)} ETH, Gas reserve: ${ethers.utils.formatUnits(gasReserve, 18)} ETH`);
+            
+            // Track failed transaction - insufficient funds after gas reserve
+            trackTransaction({
+                success: false,
+                gasUsed: "0",
+                gasCost: "0",
+                operationType: "V3_swaps",
+                walletAddress: signer.address,
+                tokensSwapped: 0,
+                additionalData: {
+                    error: 'insufficient_funds_after_gas_reserve',
+                    walletIndex: index,
+                    walletBalance: ethers.utils.formatUnits(currentBalance, 18),
+                    gasReserve: ethers.utils.formatUnits(gasReserve, 18),
+                    tokensToSwap: numberOfTokens,
+                    executionTime: Date.now() - startTime
+                }
+            });
+            
             return { success: false, reason: 'insufficient_funds' };
         }
         
@@ -1048,7 +1301,7 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
 
         console.log(`Preparing V3 swap for ${amountPerToken.toString()} wei each of ${numberOfTokens} tokens...`);
         console.log(`Using V3 fee tier: ${v3Fee} basis points`);
-        // return
+        
         // Enhanced gas price calculation
         const baseGasPrice = await provider.getGasPrice();
         console.log(`Base gas price: ${ethers.utils.formatUnits(baseGasPrice, 9)} Gwei`);
@@ -1093,6 +1346,27 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
         if (totalGasCost.gt(gasMaxWei)) {
             console.log(`❌ Gas cost ${totalGasCostETH} ETH exceeds maximum allowed ${gasMaxETH} ETH`);
             console.log(`⚠️  V3 Multi-swap cancelled to stay within gas limits`);
+            
+            // Track failed transaction - gas cost exceeds max
+            trackTransaction({
+                success: false,
+                gasUsed: gasLimit.toString(),
+                gasCost: totalGasCostETH,
+                operationType: "V3_swaps",
+                walletAddress: signer.address,
+                tokensSwapped: 0,
+                additionalData: {
+                    gasLimitExceeded: true,
+                    error: 'gas_cost_exceeds_max',
+                    walletIndex: index,
+                    gasRequested: totalGasCostETH,
+                    gasMaxAllowed: gasMaxETH,
+                    tokensCount: numberOfTokens,
+                    v3FeeTier: v3Fee,
+                    executionTime: Date.now() - startTime
+                }
+            });
+            
             return { 
                 success: false, 
                 reason: 'gas_cost_exceeds_max',
@@ -1105,6 +1379,25 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
         // Verify we have enough balance for gas + swap amounts
         if (currentBalance.lt(totalTxCost)) {
             console.log(`Insufficient funds. Need ${ethers.utils.formatUnits(totalTxCost, 18)} ETH but have ${ethers.utils.formatUnits(currentBalance, 18)} ETH`);
+            
+            // Track failed transaction - insufficient gas
+            trackTransaction({
+                success: false,
+                gasUsed: "0",
+                gasCost: "0",
+                operationType: "V3_swaps",
+                walletAddress: signer.address,
+                tokensSwapped: 0,
+                additionalData: {
+                    error: 'insufficient_gas',
+                    walletIndex: index,
+                    walletBalance: ethers.utils.formatUnits(currentBalance, 18),
+                    totalTxCost: ethers.utils.formatUnits(totalTxCost, 18),
+                    tokensCount: numberOfTokens,
+                    executionTime: Date.now() - startTime
+                }
+            });
+            
             return { success: false, reason: 'insufficient_gas' };
         }
         
@@ -1148,6 +1441,27 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
                 }
             } catch (receiptError) {
                 console.error(`Failed to get receipt: ${receiptError.message}`);
+                
+                // Track failed transaction - receipt error
+                trackTransaction({
+                    success: false,
+                    gasUsed: "0",
+                    gasCost: "0",
+                    operationType: "V3_swaps",
+                    walletAddress: signer.address,
+                    transactionHash: swapTransaction.hash,
+                    tokensSwapped: 0,
+                    additionalData: {
+                        error: 'receipt_error',
+                        walletIndex: index,
+                        tokensCount: numberOfTokens,
+                        v3FeeTier: v3Fee,
+                        executionTime: Date.now() - startTime,
+                        waitError: waitError.message,
+                        receiptError: receiptError.message
+                    }
+                });
+                
                 return { success: false, reason: 'receipt_error', txHash: swapTransaction.hash };
             }
         }
@@ -1163,6 +1477,31 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
             console.log(`📊 Gas efficiency: ${gasEfficiency}%`);
             console.log(`🎯 V3 Tokens swapped: ${numberOfTokens}`);
             console.log(`💎 V3 Fee tier used: ${v3Fee} basis points`);
+            
+            // Track successful transaction
+            trackTransaction({
+                success: true,
+                gasUsed: receipt.gasUsed.toString(),
+                gasCost: actualGasCostETH,
+                operationType: "V3_swaps",
+                tokensSwapped: numberOfTokens,
+                walletAddress: signer.address,
+                transactionHash: receipt.transactionHash,
+                additionalData: {
+                    walletIndex: index,
+                    gasEstimated: gasLimit.toString(),
+                    gasEfficiency: parseFloat(gasEfficiency),
+                    estimatedGasCost: totalGasCostETH,
+                    swapType: 'V3',
+                    feeTier: v3Fee,
+                    tokensCount: numberOfTokens,
+                    tokenAddresses: tokensToSwap,
+                    amountPerToken: amountPerToken.toString(),
+                    totalSwapAmount: totalSwapAmount.toString(),
+                    executionTime: Date.now() - startTime,
+                    contractAddress: multicallAddress
+                }
+            });
             
             return { 
                 success: true, 
@@ -1180,6 +1519,26 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
             };
         } else {
             console.log(`❌ V3 Multi-swap failed: ${receipt?.transactionHash || swapTransaction.hash}`);
+            
+            // Track failed transaction - transaction failed
+            trackTransaction({
+                success: false,
+                gasUsed: receipt?.gasUsed?.toString() || "0",
+                gasCost: receipt ? ethers.utils.formatUnits(gasPrice.mul(receipt.gasUsed), 18) : "0",
+                operationType: "V3_swaps",
+                walletAddress: signer.address,
+                transactionHash: receipt?.transactionHash || swapTransaction.hash,
+                tokensSwapped: 0,
+                additionalData: {
+                    error: 'transaction_failed',
+                    walletIndex: index,
+                    tokensCount: numberOfTokens,
+                    v3FeeTier: v3Fee,
+                    executionTime: Date.now() - startTime,
+                    transactionStatus: receipt?.status || 'unknown'
+                }
+            });
+            
             return { 
                 success: false, 
                 reason: 'transaction_failed', 
@@ -1190,39 +1549,61 @@ async function executeMultiSwapV3(index, wallets, tokens = null) {
     } catch (err) {
         console.error(`V3 Error for wallet ${index}:`, err.message);
         
-        // Handle specific error types
+        // Determine error type for better tracking
+        let errorType = 'unknown_error';
+        let gasLimitExceeded = false;
+        
         if (err.code === 'INSUFFICIENT_FUNDS' || err.message.includes('insufficient funds')) {
             console.log(`No funds in wallet ${index}`);
-            return { success: false, reason: 'insufficient_funds' };
+            errorType = 'insufficient_funds';
         } else if (err.code === 'NONCE_EXPIRED' || err.code === 'NONCE_TOO_LOW' || err.message.includes('nonce too low')) {
             console.log(`Nonce issue in wallet ${index}`);
-            return { success: false, reason: 'nonce_error' };
+            errorType = 'nonce_error';
         } else if (err.code === 'REPLACEMENT_UNDERPRICED') {
             console.log(`Gas price too low for wallet ${index}`);
-            return { success: false, reason: 'gas_price_low' };
+            errorType = 'gas_price_low';
         } else if (err.message.includes('gas')) {
             console.log(`Gas related error for wallet ${index}:`, err.message);
-            return { success: false, reason: 'gas_error' };
+            errorType = 'gas_error';
         } else if (err.message.includes('INVALID_ARGUMENT')) {
             console.log(`ABI parsing error for wallet ${index}:`, err.message);
-            return { success: false, reason: 'abi_error' };
+            errorType = 'abi_error';
         } else if (err.message.includes('insufficient liquidity') || err.message.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
             console.log(`Insufficient liquidity for V3 swap in wallet ${index}`);
-            return { success: false, reason: 'insufficient_liquidity' };
+            errorType = 'insufficient_liquidity';
         } else if (err.message.includes('execution reverted')) {
             console.log(`V3 Contract execution reverted for wallet ${index}:`, err.message);
-            return { success: false, reason: 'execution_reverted' };
+            errorType = 'execution_reverted';
         } else if (err.message.includes('STF') || err.message.includes('FullMath')) {
             console.log(`V3 math overflow/underflow for wallet ${index}`);
-            return { success: false, reason: 'v3_math_error' };
+            errorType = 'v3_math_error';
+        } else {
+            console.error(`Unexpected V3 error in wallet ${index}:`, err.message);
         }
         
-        // Only throw truly unexpected errors
-        console.error(`Unexpected V3 error in wallet ${index}:`, err.message);
-        return { success: false, reason: 'unknown_error', error: err.message };
+        // Track failed transaction with detailed error info
+        trackTransaction({
+            success: false,
+            gasUsed: "0",
+            gasCost: "0",
+            operationType: "V3_swaps",
+            walletAddress: wallets[index] ? new ethers.Wallet(wallets[index][1], provider).address : null,
+            tokensSwapped: 0,
+            additionalData: {
+                error: errorType,
+                walletIndex: index,
+                errorMessage: err.message,
+                errorCode: err.code || 'unknown',
+                tokensCount: tokens ? (Array.isArray(tokens) ? tokens.length : defaultTokens["V3"]?.length || 0) : 0,
+                gasLimitExceeded,
+                executionTime: Date.now() - startTime,
+                stackTrace: err.stack ? err.stack.substring(0, 500) : 'unavailable' // Limit stack trace length
+            }
+        });
+        
+        return { success: false, reason: errorType, error: err.message };
     }
 }
-
 async function multiSwapV3Batch(batchSize = config.defaultBatchSize, tokenAddresses, startAt, endsAt, delayBetweenBatches = 2000, delayBetweenTx = 100) {
     log(`Starting V3 Multi-Swap batch processing with enhanced controls:`);
     log(`• Batch size: ${batchSize}`);
@@ -1893,20 +2274,9 @@ async function airdropBatch(chunkSize = config.defaultChunkSize, totalEthAmount 
     };
 }
 
-async function swapBatch(batchSize = config.defaultBatchSize, tokenAddress, delayBetweenBatches = 1000, delayBetweenTx = 50) {
-    log(`Starting single token swap batch processing with enhanced controls:`);
-    log(`• Batch size: ${batchSize}`);
-    log(`• Token address: ${tokenAddress}`);
-    log(`• Delay between batches: ${delayBetweenBatches}ms`);
-    log(`• Delay between transactions: ${delayBetweenTx}ms`);
+async function swapBatch(batchSize, tokenAddress, delayBetweenBatches, delayBetweenTx) {
+    log(`Starting single token swap batch processing with statistics tracking:`);
     
-    // Get gas max limit from config
-    const gasMaxETH = typeof config.gasSettings.gasMax === 'string' ? 
-        config.gasSettings.gasMax : 
-        config.gasSettings.gasMax.toString();
-    const gasMaxWei = ethers.utils.parseUnits(gasMaxETH, 18);
-    log(`• Gas max limit: ${gasMaxETH} ETH`);
-
     const wallets = loadWallets();
     if (wallets.length === 0) {
         throw new Error('No wallets found. Create wallets first.');
@@ -1918,7 +2288,6 @@ async function swapBatch(batchSize = config.defaultBatchSize, tokenAddress, dela
     let totalProcessed = 0;
     let batchCount = 0;
     
-    // Calculate total batches for progress tracking
     const totalBatches = Math.ceil(wallets.length / batchSize);
     log(`📊 Processing ${totalBatches} batches for ${wallets.length} wallets total\n`);
 
@@ -1928,100 +2297,65 @@ async function swapBatch(batchSize = config.defaultBatchSize, tokenAddress, dela
         
         log(`🔄 Processing swap batch ${batchCount}/${totalBatches} (wallets ${start}-${end-1})`);
         
-        // Track batch-specific results
-        let batchSuccessful = 0;
-        let batchFailed = 0;
-        let batchGasExceeded = 0;
-        
         const batchPromises = [];
         
         for (let i = start; i < end; i++) {
-            // Add delay between transactions within batch if specified
             if (delayBetweenTx > 0 && i > start) {
                 await sleep(delayBetweenTx);
             }
             
             batchPromises.push(
-                executeSwap(i, wallets, tokenAddress, gasMaxWei, gasMaxETH)
+                executeSwap(i, wallets, tokenAddress) // This now includes stats tracking
                     .then(result => {
                         totalProcessed++;
                         if (result && result.success) {
                             successfulSwaps++;
-                            batchSuccessful++;
                             log(`✅ Wallet ${i}: Success - ${result.txHash}`);
-                            if (result.gasEfficiency) {
-                                log(`   Gas efficiency: ${result.gasEfficiency}%`);
-                            }
                         } else if (result && result.reason === 'gas_cost_exceeds_max') {
                             gasLimitExceeded++;
-                            batchGasExceeded++;
-                            log(`💰 Wallet ${i}: Skipped - Gas cost ${result.gasRequested} ETH exceeds limit ${result.gasMaxAllowed} ETH`);
+                            log(`💰 Wallet ${i}: Skipped - Gas cost exceeds limit`);
                         } else {
                             failedSwaps++;
-                            batchFailed++;
-                            const reason = result?.reason || 'unknown';
-                            log(`❌ Wallet ${i}: Failed - ${reason}`);
+                            log(`❌ Wallet ${i}: Failed - ${result?.reason || 'unknown'}`);
                         }
                         return result;
                     })
                     .catch(error => {
                         totalProcessed++;
                         failedSwaps++;
-                        batchFailed++;
                         log(`💥 Wallet ${i}: Exception - ${error.message}`);
                         return { success: false, reason: 'exception', error: error.message };
                     })
             );
         }
 
-        // Wait for all transactions in current batch to complete
-        const batchResults = await Promise.all(batchPromises);
+        await Promise.all(batchPromises);
         
-        // Calculate batch success rate
-        const batchTotal = batchResults.length;
-        const batchSuccessRate = batchTotal > 0 ? ((batchSuccessful / batchTotal) * 100).toFixed(1) : '0.0';
-        
-        log(`📈 Batch ${batchCount} completed:`);
-        log(`   • Successful: ${batchSuccessful}/${batchTotal} (${batchSuccessRate}%)`);
-        log(`   • Failed: ${batchFailed}`);
-        log(`   • Gas exceeded: ${batchGasExceeded}`);
-        
-        // Overall progress
-        const overallProcessed = totalProcessed;
-        const overallSuccessRate = overallProcessed > 0 ? ((successfulSwaps / overallProcessed) * 100).toFixed(1) : '0.0';
-        log(`📊 Overall progress: ${overallProcessed}/${wallets.length} (${overallSuccessRate}% success rate)`);
-
-        // Delay between batches (except for the last batch)
         if (end < wallets.length) {
             log(`⏱️  Waiting ${delayBetweenBatches}ms before next batch...\n`);
             await sleep(delayBetweenBatches);
         }
     }
     
-    // Final summary
-    const finalSuccessRate = totalProcessed > 0 ? ((successfulSwaps / totalProcessed) * 100).toFixed(2) : '0.00';
-    
-    log(`\n🎯 Single Token Swap Batch Processing Complete!`);
-    log(`📊 Final Results:`);
-    log(`   • Total wallets processed: ${totalProcessed}/${wallets.length}`);
-    log(`   • Successful swaps: ${successfulSwaps}`);
-    log(`   • Failed swaps: ${failedSwaps}`);
-    log(`   • Gas limit exceeded: ${gasLimitExceeded}`);
-    log(`   • Success rate: ${finalSuccessRate}%`);
-    log(`   • Batches processed: ${batchCount}`);
-    log(`   • Token: ${tokenAddress}`);
-    
-    // Return detailed results
-    return {
+    // Track the batch operation summary
+    const batchResults = {
         totalProcessed,
         successfulSwaps,
         failedSwaps,
         gasLimitExceeded,
-        successRate: parseFloat(finalSuccessRate),
+        successRate: parseFloat(((successfulSwaps / totalProcessed) * 100).toFixed(2)),
         batchesProcessed: batchCount,
         tokenAddress,
         totalWallets: wallets.length
     };
+    
+    // Track batch summary
+    await trackBatchOperation("V2_swaps", batchResults);
+    
+    log(`\n🎯 Single Token Swap Batch Processing Complete!`);
+    log(`📊 Final Results: ${successfulSwaps}/${totalProcessed} successful (${batchResults.successRate}%)`);
+    
+    return batchResults;
 }
 
 async function multiSwapBatch(batchSize = config.defaultBatchSize, tokens = defaultTokens["v2"], delayBetweenBatches = 2000, delayBetweenTx = 100) {
@@ -5128,14 +5462,13 @@ async function main() {
     const command = process.argv[2];
     const args = process.argv.slice(3);
 
-
-    // const tokensDatabase = await loadTokens()
-    // console.log(tokensDatabase)
+    const walletsSaved = await loadWallets()
+    // executeSwap(0, walletsSaved, defaultTokens["V2"][0])
     // return 
 
 
     if (command === 'help' || command === '--help' || command === '-h') {
-        showHelp();
+        // showHelp();
         return;
     }
 
@@ -5154,6 +5487,43 @@ async function main() {
                 
             case 'check':
                 await checkWallets();
+                break;
+
+             case 'stats':
+                // Display detailed statistics
+                const { getLiveStats, getDailyStats, getStatsSummary } = require('./stats-tracker');
+                const summary = getStatsSummary();
+                
+                console.log('\n📊 === DETAILED STATISTICS ===');
+                console.log('\n🔴 LIVE STATS:');
+                console.log(`   Total Transactions: ${summary.live.totalTransactions}`);
+                console.log(`   Successful: ${summary.live.successfulTransactions}`);
+                console.log(`   Failed: ${summary.live.failedTransactions}`);
+                console.log(`   Success Rate: ${summary.live.successRate}%`);
+                console.log(`   Total Gas Cost: ${summary.live.totalGasCost} ETH`);
+                console.log(`   Funded Wallets: ${summary.live.fundedWallets}`);
+                
+                console.log('\n📅 TODAY\'S STATS:');
+                console.log(`   Transactions: ${summary.today.totalTransactions}`);
+                console.log(`   Successful: ${summary.today.successfulTransactions}`);
+                console.log(`   Failed: ${summary.today.failedTransactions}`);
+                console.log(`   Gas Cost: ${summary.today.totalGasCost} ETH`);
+                
+                console.log('\n🗓️  THIS MONTH:');
+                console.log(`   Transactions: ${summary.thisMonth.totalTransactions}`);
+                console.log(`   Successful: ${summary.thisMonth.successfulTransactions}`);
+                console.log(`   Failed: ${summary.thisMonth.failedTransactions}`);
+                console.log(`   Gas Cost: ${summary.thisMonth.totalGasCost} ETH`);
+                
+                console.log('\n💼 OPERATION BREAKDOWN (Today):');
+                Object.entries(summary.today.operationTypes).forEach(([type, count]) => {
+                    if (count > 0) {
+                        console.log(`   ${type}: ${count}`);
+                    }
+                });
+                break;
+             case 'balances':
+                getWalletBalances()
                 break;
                
             case 'airdrop-and-swapv2':
@@ -6192,8 +6562,8 @@ async function main() {
                 
             default:
                 errorLog(`Unknown command: ${command}`);
-                showHelp();
-                process.exit(1);
+                // showHelp();
+                // process.exit(1);
         }
     } catch (err) {
         errorLog(`Command failed: ${err.message}`);

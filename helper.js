@@ -554,6 +554,18 @@ function loadWallets() {
     return [];
 }
 
+function loadWalletsBalances() {
+    try {
+        if (fs.existsSync('./wallets_balances_multicall.json')) {
+            const data = fs.readFileSync('./wallets_balances_multicall.json', 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (err) {
+        errorLog('Error loading wallets: ' + err.message);
+    }
+    return [];
+}
+
 function saveWallets(wallets) {
     try {
         fs.writeFileSync('./wallets.json', JSON.stringify(wallets, null, 2));
@@ -763,6 +775,8 @@ async function createWallets(count) {
     
     const allWallets = [...existingWallets, ...newWallets];
     saveWallets(allWallets);
+
+    await updateWalletStats(newWallets.length, "0");
     
     log(`✅ Successfully created ${count} new wallets`);
     log(`📊 Total wallets: ${allWallets.length} (${existingWallets.length} existing + ${newWallets.length} new)`);
@@ -965,12 +979,350 @@ const formatNumber = (value) => {
   };
 
 
+  // Aggregator contract configuration
+const AGGREGATOR_CONTRACT_ADDRESS = "0xCda4cfc5628a2A505e437aa8946aE55EAA92D92c";
+const AGGREGATOR_ABI = [
+    "function aggregate(address[] memory targets, bytes[] memory callData) public view returns (uint256 blockNumber, uint256 ethBalance, bytes[] memory returnData)"
+];
+
+// Maximum batch size to avoid RPC limits
+const MAX_BATCH_SIZE = 1000;
+
+// Cache for balance data
+let balanceCache = {
+    data: null,
+    lastUpdate: 0,
+    isUpdating: false
+};
+
+// Cache duration in milliseconds (5 minutes)
+const CACHE_DURATION = 5 * 60 * 1000;
+
+
+
+async function getWalletBalances(wallets = null) {
+  const startTime = Date.now();
+
+     const balanceCheckerAddress = "0xD9F4F3B9919b27Ab9Afc4Ec8a786FaB8E0223563"; // Replace with actual contract address
+    const balanceCheckerAbi = [
+    "function getEthBalances(address[] calldata wallets) external view returns (uint256[] memory balances)"
+    ];
+    const balanceChecker = new ethers.Contract(balanceCheckerAddress, balanceCheckerAbi, provider);
+
+    
+
+  try {
+    let walletsToCheck = wallets || loadWallets(); // Assume your loader returns [[address, ...], ...]
+    const batchSize = walletsToCheck.length;
+    // walletsToCheck = walletsToCheck.slice(0,10000)
+    if (walletsToCheck.length === 0) {
+      throw new Error('No wallets found. Create wallets first.');
+    }
+
+    log(`🔍 Fetching balances for ${walletsToCheck.length} wallets`);
+    log(`📦 Batch size: ${batchSize} wallets per batch`);
+
+    const walletAddresses = walletsToCheck.map(w => w[0]);
+    const batches = [];
+    for (let i = 0; i < walletAddresses.length; i += batchSize) {
+      batches.push(walletAddresses.slice(i, i + batchSize));
+    }
+
+    log(`📊 Processing ${batches.length} batches...`);
+
+    let allBalances = [];
+    let totalBalance = ethers.BigNumber.from(0);
+    let walletsWithBalance = 0;
+    let highestBalance = ethers.BigNumber.from(0);
+    let highestBalanceWallet = null;
+
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      log(`🔄 Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} wallets)`);
+
+      try {
+        // console.log(batch)
+        const balances = await balanceChecker.getEthBalances(batch);
+
+        balances.forEach((rawBalance, i) => {
+          const address = batch[i];
+          const balance = ethers.BigNumber.from(rawBalance);
+          const balanceETH = ethers.utils.formatEther(balance);
+
+          allBalances.push({
+            address,
+            balance,
+            balanceETH,
+            balanceWei: balance.toString()
+          });
+
+          totalBalance = totalBalance.add(balance);
+          if (balance.gt(0)) walletsWithBalance++;
+          if (balance.gt(highestBalance)) {
+            highestBalance = balance;
+            highestBalanceWallet = address;
+          }
+        });
+      } catch (err) {
+        errorLog(`❌ Batch ${batchIndex + 1} failed: ${err.message}`);
+        batch.forEach(address => {
+          allBalances.push({
+            address,
+            balance: ethers.BigNumber.from(0),
+            balanceETH: "0",
+            balanceWei: "0",
+            error: err.message
+          });
+        });
+      }
+
+
+
+      if (batchIndex < batches.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    const executionTime = Date.now() - startTime;
+    const successfulQueries = allBalances.filter(b => !b.error).length;
+    const failedQueries = allBalances.filter(b => b.error).length;
+    const averageBalance = walletsWithBalance > 0
+      ? totalBalance.div(walletsWithBalance)
+      : ethers.BigNumber.from(0);
+
+    // const sortedByBalance = [...allBalances]
+    //   .filter(b => !b.error)
+    //   .sort((a, b) => b.balance.sub(a.balance).toNumber());
+
+    const ranges = [
+      { min: 0, max: 0, label: 'empty' },
+      { min: 0.000001, max: 0.001, label: 'micro' },
+      { min: 0.001, max: 0.01, label: 'small' },
+      { min: 0.01, max: 0.1, label: 'medium' },
+      { min: 0.1, max: 1, label: 'large' },
+      { min: 1, max: Infinity, label: 'whale' }
+    ];
+
+    const distribution = {};
+    ranges.forEach(({ min, max, label }) => {
+      const walletsInRange = allBalances.filter(w => {
+        if (w.error) return false;
+        const bal = parseFloat(w.balanceETH);
+        return min === 0 && max === 0 ? bal === 0 : bal >= min && bal < max;
+      });
+
+      distribution[label] = {
+        count: walletsInRange.length,
+        percentage: ((walletsInRange.length / allBalances.length) * 100).toFixed(2),
+        wallets: walletsInRange.map(w => ({ address: w.address, balanceETH: w.balanceETH }))
+      };
+    });
+
+    const resultData = {
+      metadata: {
+        timestamp: new Date().toISOString(),
+        executionTimeMs: executionTime,
+        totalWallets: walletAddresses.length,
+        successfulQueries,
+        failedQueries,
+        walletsWithBalance,
+        walletsEmpty: successfulQueries - walletsWithBalance,
+        totalBalanceETH: ethers.utils.formatEther(totalBalance),
+        totalBalanceWei: totalBalance.toString(),
+        averageBalanceETH: ethers.utils.formatEther(averageBalance),
+        highestBalanceETH: ethers.utils.formatEther(highestBalance),
+        highestBalanceWallet,
+        successRate: ((successfulQueries / walletAddresses.length) * 100).toFixed(2),
+        lastUpdated: new Date().toISOString()
+      },
+      summary: {
+        distribution,
+        // topWallets: sortedByBalance.slice(0, 10),
+        emptyWallets: allBalances.filter(w => !w.error && parseFloat(w.balanceETH) === 0).map(w => w.address),
+        errorWallets: allBalances.filter(w => w.error).map(w => ({ address: w.address, error: w.error }))
+      },
+      wallets: allBalances.map((wallet, index) => ({
+        index,
+        address: wallet.address,
+        balanceETH: wallet.balanceETH,
+        balanceWei: wallet.balanceWei,
+        hasBalance: parseFloat(wallet.balanceETH) > 0,
+        status: wallet.error ? 'error' : (parseFloat(wallet.balanceETH) > 0 ? 'funded' : 'empty'),
+        error: wallet.error || null,
+        lastChecked: new Date().toISOString()
+      }))
+    };
+
+    resultData.wallets.sort((a, b) => parseFloat(b.balanceETH) - parseFloat(a.balanceETH));
+
+    try {
+      const filename = 'wallets_balances_multicall.json';
+      fs.writeFileSync(`./${filename}`, JSON.stringify(resultData, null, 2));
+      const fileSize = fs.statSync(`./${filename}`).size;
+      log(`💾 Results saved to ${filename} (${Math.round(fileSize / 1024)} KB)`);
+    } catch (err) {
+      errorLog(`❌ Failed to write file: ${err.message}`);
+    }
+
+    log(`✅ Balance fetch completed successfully!`);
+    log(`📊 Total wallets: ${resultData.metadata.totalWallets}`);
+    log(`📈 Wallets with balance: ${resultData.metadata.walletsWithBalance}`);
+    log(`💰 Total ETH: ${resultData.metadata.totalBalanceETH}`);
+    log(`🚀 Highest: ${resultData.metadata.highestBalanceETH} (${resultData.metadata.highestBalanceWallet})`);
+    log(`⚡ Execution time: ${executionTime}ms`);
+
+    Object.entries(distribution).forEach(([label, data]) => {
+      log(`   ${label}: ${data.count} wallets (${data.percentage}%)`);
+    });
+
+    return resultData;
+
+  } catch (err) {
+    const executionTime = Date.now() - startTime;
+    errorLog(`❌ Wallet balance fetch failed: ${err.message}`);
+    return {
+      success: false,
+      error: err.message,
+      timestamp: new Date().toISOString(),
+      executionTimeMs: executionTime
+    };
+  }
+}
+
+async function loadWalletsBalanceSorted(MIN_VALUE = 0.000003){
+    const wallets = await loadWalletsBalances()
+    const noEmpty = wallets.wallets.filter(item => Number(item.balanceETH) > MIN_VALUE);
+    const sorted = noEmpty.sort((a,b) => Number(b.balanceETH) - Number(a.balanceETH))
+    return sorted
+}
+
+// loadWalletsBalanceSorted()
+
+/**
+ * Get cached balance data or fetch new data if cache is expired
+ */
+async function getCachedBalances(forceRefresh = false) {
+    const now = Date.now();
+
+ 
+    
+    // Return cached data if it's still valid and not forcing refresh
+    if (!forceRefresh && 
+        balanceCache.data && 
+        (now - balanceCache.lastUpdate) < CACHE_DURATION && 
+        !balanceCache.isUpdating) {
+        
+        log(`📋 Returning cached balance data (age: ${Math.round((now - balanceCache.lastUpdate) / 1000)}s)`);
+        return {
+            ...balanceCache.data,
+            cached: true,
+            cacheAge: now - balanceCache.lastUpdate
+        };
+    }
+
+    // If already updating, wait for it to complete
+    if (balanceCache.isUpdating) {
+        log(`⏳ Balance update in progress, waiting...`);
+        
+        // Wait up to 30 seconds for update to complete
+        let attempts = 0;
+        while (balanceCache.isUpdating && attempts < 300) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        // Return whatever data we have
+        return balanceCache.data || { success: false, error: 'Update timeout' };
+    }
+
+    // Fetch new data
+    balanceCache.isUpdating = true;
+    
+    try {
+        log(`🔄 Fetching fresh balance data...`);
+        const freshData = await getWalletBalances();
+        
+        balanceCache.data = freshData;
+        balanceCache.lastUpdate = now;
+        
+        return {
+            ...freshData,
+            cached: false
+        };
+        
+    } catch (error) {
+        errorLog(`Failed to fetch fresh balance data: ${error.message}`);
+        
+        // Return cached data if available, even if expired
+        if (balanceCache.data) {
+            return {
+                ...balanceCache.data,
+                cached: true,
+                cacheAge: now - balanceCache.lastUpdate,
+                warning: 'Using expired cache due to fetch error'
+            };
+        }
+        
+        throw error;
+        
+    } finally {
+        balanceCache.isUpdating = false;
+    }
+}
+
+
+async function createSignedTransfers() {
+    const signedTxs = [];
+
+    const wallets = await loadWallets(); // [[address, privateKey], ...]
+    const privateKeys = wallets.map(item => item[1]).slice(1,9);
+
+    const to = contracts.deployerContract;
+    const TRANSFER_TYPEHASH = ethers.utils.keccak256(
+        ethers.utils.toUtf8Bytes("Transfer(address from,address to,uint256 amount,uint256 nonce)")
+    );
+
+    for (const privateKey of privateKeys) {
+        const wallet = new ethers.Wallet(privateKey, provider);
+        const from = wallet.address;
+        const nonce = 0; 
+        const balance = await provider.getBalance(wallet.address)
+
+        const encoded = ethers.utils.defaultAbiCoder.encode(
+            ["bytes32", "address", "address", "uint256", "uint256"],
+            [TRANSFER_TYPEHASH, from, "0x0753A7156F376180f787ABC65Bd6A30994896fFd", balance, nonce]
+        );
+
+        const hash = ethers.utils.keccak256(encoded);
+        const ethSignedHash = ethers.utils.hashMessage(ethers.utils.arrayify(hash)); // adds the Ethereum prefix
+
+        const signature = await wallet.signMessage(ethers.utils.arrayify(hash)); // sign raw hash
+
+        console.log(`✅ Signed from: ${from} → ${to} | amount: ${balance.toString()} | nonce: ${nonce} | ${signature}`);
+
+
+        signedTxs.push({
+            from,
+            to,
+            amount: balance.toString(),
+            nonce,
+            signature
+        });
+    }
+
+    return signedTxs;
+}
+
+// createSignedTransfers();
+
 module.exports = {
     config,
     provider,
     formatNumber,
     formatAddress,
     contracts,
+    getWalletBalances,
     routerAbi,
     airdropAbi,
     multicallAbi,
@@ -978,6 +1330,7 @@ module.exports = {
     volumeSwapAbi,
     ERC20_ABI,
     defaultTokens,
+    loadWalletsBalanceSorted,
     LockyFiDeployerAbi,
     addTokens,
     addSingleToken,
@@ -998,5 +1351,6 @@ module.exports = {
     getGasEstimates,
     getContractAddress,
     createWalletsToTarget,
-    checkWallets
+    checkWallets,
+    loadWalletsBalances
 };

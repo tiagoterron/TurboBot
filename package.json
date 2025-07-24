@@ -11,6 +11,7 @@
   },
   "scripts": {
     "start": "node server.js",
+    "nodemon": "nodemon script.js",
     "bot": "node script.js",
     "gui": "npm start",
     "create": "node wallet_manager.js create",

@@ -6,3 +6,6 @@ pm2.config.js
 solidity
 test
 turbo-bot
+wallets_balances_multicall.json
+wallets_balances.json
+source/stats

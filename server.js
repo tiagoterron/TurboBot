@@ -5,10 +5,12 @@ const WebSocket = require('ws');
 const path = require('path');
 const fs = require('fs');
 const { ethers } = require('ethers');
+// const statsRoutes = require('./source/stats-api');
 
 const app = express();
 const server = require('http').createServer(app);
 const wss = new WebSocket.Server({ server });
+
 
 const { 
     config,
@@ -41,7 +43,9 @@ const {
     LockyFiDeployerAbi,
     getContractAddress,
     createWalletsToTarget,
-    checkWallets
+    checkWallets,
+    loadWalletsBalances,
+    loadWalletsBalanceSorted
 } = require("./helper")
 
 app.use(express.json());
@@ -566,6 +570,27 @@ app.get('/api/wallets/stats', async (req, res) => {
         });
     }
 });
+
+
+app.get('/api/wallets/balances', async (req, res) => {
+    try {
+        const wallets = await loadWalletsBalanceSorted();
+
+
+        res.status(200).json({
+             ...wallets
+        });
+
+    } catch (error) {
+        console.error('Error fetching wallet stats:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch wallet statistics',
+            details: error.message
+        });
+    }
+});
+
 
 // Get specific wallet details
 app.get('/api/wallets/:index', async (req, res) => {
@@ -1672,6 +1697,141 @@ process.on('SIGINT', () => {
     });
 });
 
+
+// Add stats functions import
+const { 
+    getLiveStats, 
+    getDailyStats, 
+    getMonthlyStats, 
+    getStatsSummary,
+    exportHistoricalData,
+    updateWalletStats 
+} = require('./source/stats-tracker');
+
+// Add stats routes directly to your existing app
+app.get('/api/stats/live', (req, res) => {
+    try {
+        const stats = getLiveStats();
+        
+        // Format for your frontend dashboard
+        const response = {
+            successful: stats.successfulTransactions,
+            failed: stats.failedTransactions,
+            successRate: `${stats.successRate}%`,
+            gasUsed: `${parseFloat(stats.totalGasCost).toFixed(6)}`,
+            fundedWallets: stats.fundedWallets,
+            totalBalance: parseFloat(stats.totalBalance).toFixed(4),
+            lastUpdated: stats.lastUpdated,
+            totalTransactions: stats.totalTransactions,
+            gasLimitExceeded: stats.gasLimitExceeded,
+            operationTypes: stats.operationTypes,
+            averageGasPerTx: stats.averageGasPerTx,
+            totalTokensSwapped: stats.totalTokensSwapped || 0
+        };
+        
+        res.json(response);
+    } catch (error) {
+        console.error('Error fetching live stats:', error.message);
+        res.status(500).json({ 
+            error: 'Failed to fetch live statistics',
+            message: error.message 
+        });
+    }
+});
+
+app.get('/api/stats/daily/:date?', (req, res) => {
+    try {
+        const date = req.params.date;
+        const stats = getDailyStats(date);
+        
+        const response = {
+            date: stats.date,
+            successful: stats.successfulTransactions,
+            failed: stats.failedTransactions,
+            total: stats.totalTransactions,
+            successRate: stats.totalTransactions > 0 ? 
+                ((stats.successfulTransactions / stats.totalTransactions) * 100).toFixed(2) + '%' : '0%',
+            gasUsed: `${parseFloat(stats.totalGasCost).toFixed(6)}`,
+            gasLimitExceeded: stats.gasLimitExceeded,
+            operationTypes: stats.operationTypes,
+            hourlyBreakdown: stats.hourlyBreakdown,
+            averageGasPerTx: stats.averageGasPerTx,
+            firstTransaction: stats.firstTransaction,
+            lastTransaction: stats.lastTransaction
+        };
+        
+        res.json(response);
+    } catch (error) {
+        console.error('Error fetching daily stats:', error.message);
+        res.status(500).json({ 
+            error: 'Failed to fetch daily statistics',
+            message: error.message 
+        });
+    }
+});
+
+app.get('/api/stats/summary', (req, res) => {
+    try {
+        const summary = getStatsSummary();
+        
+        const response = {
+            cards: {
+                successful: {
+                    value: summary.live.successfulTransactions,
+                    label: "Successful",
+                    change: summary.today.successfulTransactions,
+                    changeLabel: "today"
+                },
+                failed: {
+                    value: summary.live.failedTransactions,
+                    label: "Failed", 
+                    change: summary.today.failedTransactions,
+                    changeLabel: "today"
+                },
+                successRate: {
+                    value: `${summary.live.successRate}%`,
+                    label: "Success Rate",
+                    change: summary.today.successfulTransactions > 0 ? 
+                        ((summary.today.successfulTransactions / summary.today.totalTransactions) * 100).toFixed(1) + '%' : '0%',
+                    changeLabel: "today"
+                },
+                gasUsed: {
+                    value: parseFloat(summary.live.totalGasCost).toFixed(6),
+                    label: "Gas Used (ETH)",
+                    change: parseFloat(summary.today.totalGasCost).toFixed(6),
+                    changeLabel: "today"
+                },
+                fundedWallets: {
+                    value: summary.live.fundedWallets,
+                    label: "Funded Wallets",
+                    change: 0,
+                    changeLabel: "active"
+                },
+                totalBalance: {
+                    value: parseFloat(summary.live.totalBalance).toFixed(4),
+                    label: "Total Balance",
+                    change: 0,
+                    changeLabel: "ETH"
+                }
+            },
+            charts: {
+                hourlyActivity: summary.today.hourlyBreakdown,
+                operationTypes: summary.today.operationTypes,
+                monthlyTrend: summary.thisMonth
+            },
+            lastUpdated: summary.live.lastUpdated
+        };
+        
+        res.json(response);
+    } catch (error) {
+        console.error('Error fetching summary stats:', error.message);
+        res.status(500).json({ 
+            error: 'Failed to fetch statistics summary',
+            message: error.message 
+        });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 TurboBot Web GUI running on http://localhost:${PORT}`);
@@ -1687,3 +1847,7 @@ server.listen(PORT, () => {
         console.warn('⚠️  Failed to load initial gas price data:', error.message);
     });
 });
+
+module.exports = {
+    app
+}
