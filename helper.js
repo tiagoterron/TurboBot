@@ -556,9 +556,13 @@ function loadWallets() {
 
 function loadWalletsBalances() {
     try {
-        if (fs.existsSync('./wallets_balances_multicall.json')) {
-            const data = fs.readFileSync('./wallets_balances_multicall.json', 'utf8');
+        if (fs.existsSync('./wallets_balances.json')) {
+            const data = fs.readFileSync('./wallets_balances.json', 'utf8');
             return JSON.parse(data);
+        }else{
+            return {
+                wallets: []
+            }
         }
     } catch (err) {
         errorLog('Error loading wallets: ' + err.message);
@@ -1157,7 +1161,7 @@ async function getWalletBalances(wallets = null) {
     resultData.wallets.sort((a, b) => parseFloat(b.balanceETH) - parseFloat(a.balanceETH));
 
     try {
-      const filename = 'wallets_balances_multicall.json';
+      const filename = 'wallets_balances.json';
       fs.writeFileSync(`./${filename}`, JSON.stringify(resultData, null, 2));
       const fileSize = fs.statSync(`./${filename}`).size;
       log(`💾 Results saved to ${filename} (${Math.round(fileSize / 1024)} KB)`);
