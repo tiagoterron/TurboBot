@@ -1699,14 +1699,18 @@ process.on('SIGINT', () => {
 
 
 // Add stats functions import
-const { 
-    getLiveStats, 
-    getDailyStats, 
-    getMonthlyStats, 
-    getStatsSummary,
-    exportHistoricalData,
-    updateWalletStats 
-} = require('./source/stats-tracker');
+// const { 
+//     getLiveStats, 
+//     getDailyStats, 
+//     getMonthlyStats, 
+//     getStatsSummary,
+//     exportHistoricalData,
+//     updateWalletStats 
+// } = require('./source/stats-tracker');
+
+const getLiveStats = () => {}
+const getDailyStats = () => {}
+const getStatsSummary = () => {}
 
 // Add stats routes directly to your existing app
 app.get('/api/stats/live', (req, res) => {
